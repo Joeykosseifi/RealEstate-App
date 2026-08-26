@@ -1,10 +1,15 @@
 // Real Estate Platform — Prisma schema
 //
-// Milestone 0 (this file): datasource + generator only. No business models
-// yet. Domain models (User, Session, Workspace, Membership, Property, ...)
-// are introduced starting Milestone 1, one milestone at a time, per
-// docs/DATABASE.md. Do not add business models here ahead of their
-// milestone — see the build order in the repository root README.
+// Milestone 0: datasource + generator only.
+// Milestone 1 (this revision): authentication, users, verification,
+// sessions, and the minimum workspace/company/role foundation needed for
+// automatic personal (agent) and company workspace creation on account
+// activation. See docs/DATABASE.md for the full model-introduction
+// schedule and the rationale behind specific design choices (e.g.
+// `User.pendingCompanyProfile`, the workspace type CHECK constraint).
+//
+// Do not add property/CRM/collaboration/subscription models yet — those
+// belong to later milestones.
 
 generator client {
   provider = "prisma-client-js"
@@ -13,4 +18,333 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+/// The onboarding path chosen at registration. This drives onboarding
+/// behavior only — it is never treated as an authorization signal.
+/// Authorization is always resolved from workspace membership + role +
+/// permissions (see docs/PERMISSIONS.md).
+enum AccountType {
+  CLIENT
+  AGENT
+  COMPANY
+}
+
+enum AccountStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum WorkspaceType {
+  PERSONAL
+  COMPANY
+}
+
+enum WorkspaceMembershipType {
+  OWNER
+  EMPLOYEE
+  FREELANCE_AGENT
+  COLLABORATOR
+}
+
+enum WorkspaceMembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+enum CompanyVerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum CompanyAccountStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+// ---------------------------------------------------------------------------
+// Users, sessions, verification, password reset
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String        @id @default(uuid()) @db.Uuid
+  firstName     String
+  lastName      String
+  /// Always stored lowercased/trimmed — see UsersService.normalizeEmail.
+  email         String        @unique
+  /// E.164 format when present — see UsersService.normalizePhone.
+  phone         String?       @unique
+  passwordHash  String
+  accountType   AccountType
+  accountStatus AccountStatus @default(PENDING_VERIFICATION)
+
+  emailVerifiedAt DateTime?
+  phoneVerifiedAt DateTime?
+  termsAcceptedAt DateTime?
+  lastLoginAt     DateTime?
+
+  /// Transient staging area for a COMPANY registration's company details
+  /// (name/email/phone/website/description), captured at registration and
+  /// consumed by the activation transaction once the user verifies email
+  /// + phone. Cleared (set null) once Company/Workspace/OWNER membership
+  /// are created. See docs/DATABASE.md for why this isn't its own table.
+  pendingCompanyProfile Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions             UserSession[]
+  emailVerifications   EmailVerification[]
+  phoneVerifications   PhoneVerification[]
+  passwordResets       PasswordReset[]
+  workspaceMemberships WorkspaceMember[]
+  personalWorkspace    Workspace?          @relation("PersonalWorkspaceOwner")
+  companiesCreated     Company[]           @relation("CompanyCreatedBy")
+  auditLogs            AuditLog[]          @relation("AuditActor")
+
+  @@map("users")
+}
+
+/// One row per logged-in device/session. The refresh token presented by
+/// the client encodes this row's id plus a random secret; only a hash of
+/// the secret is stored here. See docs/SECURITY.md "Refresh token
+/// rotation" for the full rotation + reuse-detection design.
+model UserSession {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  refreshTokenHash String @unique
+
+  userAgent String?
+  ipAddress String?
+
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("user_sessions")
+}
+
+/// Link-style email verification. `tokenHash` is a SHA-256 hash of a
+/// high-entropy random token; the raw token is only ever sent to the user
+/// (via the mail provider) and never persisted or logged.
+model EmailVerification {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("email_verifications")
+}
+
+/// Numeric-OTP phone verification. `otpHash` is a SHA-256 hash of the
+/// code; lookup is always by userId (not by hash), so no uniqueness
+/// constraint is needed on the hash itself.
+model PhoneVerification {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  phone      String
+  otpHash    String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("phone_verifications")
+}
+
+/// Password reset token. Same shape/rationale as EmailVerification.
+model PasswordReset {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("password_resets")
+}
+
+// ---------------------------------------------------------------------------
+// Workspace / company / role foundation
+//
+// Full workspace management (invitations, switching, permission
+// enforcement engine) is Milestone 2. This milestone only implements what
+// account activation needs: creating exactly one PERSONAL workspace per
+// agent, and one COMPANY workspace per company, each with an OWNER
+// membership.
+// ---------------------------------------------------------------------------
+
+model Company {
+  id                 String                    @id @default(uuid()) @db.Uuid
+  name               String
+  email              String?
+  phone              String?
+  website            String?
+  /// Object storage reference (key/URL), wired up when file storage lands.
+  logoUrl            String?
+  description        String?
+  verificationStatus CompanyVerificationStatus @default(PENDING)
+  accountStatus      CompanyAccountStatus      @default(ACTIVE)
+
+  createdByUserId String @db.Uuid
+  createdBy       User   @relation("CompanyCreatedBy", fields: [createdByUserId], references: [id])
+
+  workspace Workspace?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("companies")
+}
+
+/// A PERSONAL workspace has `personalOwnerUserId` set and `companyId`
+/// null; a COMPANY workspace has `companyId` set and `personalOwnerUserId`
+/// null. Enforced at the application layer AND by a DB CHECK constraint
+/// (added by hand in the initial migration's migration.sql, under
+/// prisma/migrations) plus the unique constraints below, which together
+/// guarantee at most one personal workspace per user and at most one
+/// workspace per company.
+model Workspace {
+  id   String        @id @default(uuid()) @db.Uuid
+  type WorkspaceType
+  name String
+
+  personalOwnerUserId String? @unique @db.Uuid
+  personalOwner       User?   @relation("PersonalWorkspaceOwner", fields: [personalOwnerUserId], references: [id])
+
+  companyId String?  @unique @db.Uuid
+  company   Company? @relation(fields: [companyId], references: [id])
+
+  members WorkspaceMember[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String    @db.Uuid
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  membershipType WorkspaceMembershipType
+  status         WorkspaceMembershipStatus @default(ACTIVE)
+
+  roleId String? @db.Uuid
+  role   Role?   @relation(fields: [roleId], references: [id])
+
+  invitedAt DateTime?
+  joinedAt  DateTime?
+  removedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Prevents duplicate memberships (and therefore duplicate OWNER grants)
+  /// for the same user in the same workspace, even under concurrent
+  /// activation attempts (enforced at the DB level, not just in code).
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("workspace_members")
+}
+
+/// Named role a membership can carry. Milestone 1 seeds only the system
+/// "OWNER" role (see prisma/seed.ts) and assigns it to workspace owners;
+/// Permission/RolePermission are foundation tables for Milestone 2's
+/// permission engine (see docs/PERMISSIONS.md) and are intentionally
+/// unpopulated beyond that seed for now.
+model Role {
+  id          String  @id @default(uuid()) @db.Uuid
+  key         String  @unique
+  name        String
+  description String?
+  isSystem    Boolean @default(false)
+
+  permissions RolePermission[]
+  members     WorkspaceMember[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String  @id @default(uuid()) @db.Uuid
+  key         String  @unique
+  description String?
+
+  roles RolePermission[]
+
+  createdAt DateTime @default(now())
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String     @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String     @db.Uuid
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// ---------------------------------------------------------------------------
+// Audit log
+// ---------------------------------------------------------------------------
+
+/// Append-only audit trail. Never write secrets (passwords, tokens, OTPs)
+/// into `metadata` — see docs/SECURITY.md.
+model AuditLog {
+  id          String  @id @default(uuid()) @db.Uuid
+  actorUserId String? @db.Uuid
+  actor       User?   @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  action     String
+  targetType String?
+  targetId   String?
+  metadata   Json?
+  ipAddress  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([actorUserId])
+  @@index([action])
+  @@map("audit_logs")
 }

@@ -111,8 +111,26 @@ entity belongs to a different workspace).
 Default deny at every step. The frontend-provided workspace, role, or
 permission is never trusted.
 
-## Status
+## Status (Milestone 1)
 
-Not yet implemented — this document defines the model that Milestone 2
-(workspaces/authorization) and Milestone 9 (collaboration/commission)
-will build against.
+The database foundation exists: `Workspace`, `WorkspaceMember`, `Role`,
+`Permission`, `RolePermission` (see `docs/DATABASE.md`). What Milestone 1
+actually does with them is narrow and specific — enough for account
+activation, nothing more:
+
+- An activated agent gets exactly one `PERSONAL` workspace and an
+  `OWNER` `WorkspaceMember` row (`WorkspacesService.ensurePersonalWorkspace`).
+- An activated company gets a `Company`, a `COMPANY` workspace, and an
+  `OWNER` `WorkspaceMember` row for the registering user
+  (`WorkspacesService.createCompanyWithWorkspace`).
+- Exactly one system `Role` is seeded (`key: "OWNER"`, see
+  `prisma/seed.ts`) and assigned to those memberships.
+- `Permission`/`RolePermission` are unpopulated — no permission keys
+  exist yet, and nothing in Milestone 1 checks a permission to authorize
+  a request.
+
+There is no permission-checking guard, no workspace-switching API, no
+membership-management API, and no enforcement of the table above yet —
+that is Milestone 2 (workspaces/authorization) and Milestone 9
+(collaboration/commission), which this document continues to define the
+target model for.

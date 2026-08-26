@@ -42,8 +42,10 @@ npm run docker:up
 npm run prisma:generate
 npm run prisma:migrate
 
+npm run prisma:seed         # seeds the system OWNER role
+
 # Run the API
-npm run dev:api        # http://localhost:3000 — GET /health
+npm run dev:api        # http://localhost:3000 — GET /health, POST /api/v1/auth/...
 
 # Run the admin web app
 npm run dev:admin       # http://localhost:3001
@@ -73,12 +75,30 @@ undefined behavior.
 | `npm run prisma:generate` | Regenerate the Prisma client |
 | `npm run prisma:migrate` | Create/apply a dev migration |
 | `npm run prisma:studio` | Open Prisma Studio |
+| `npm run prisma:seed` | Seed foundation data (system roles) |
 
 ## Database
 
 PostgreSQL via Prisma. See [`docs/DATABASE.md`](docs/DATABASE.md) for
 schema conventions and the planned model-introduction schedule. Never
 mutate the database outside of a checked-in migration.
+
+## Testing
+
+`npm test` (root) runs every app/package's unit tests. The API's
+integration/e2e suite runs against a real Postgres + Redis (not mocks)
+and lives separately, since it needs that live infrastructure and runs
+serially against shared state:
+
+```bash
+cd apps/api
+npm run test:e2e
+```
+
+See `apps/api/test/` for the auth/session/workspace-activation
+integration tests, and `tests/README.md` for the cross-cutting
+security-test checklist that grows as later milestones add the
+workspaces/properties those tests need.
 
 ## Build order (milestones)
 
@@ -88,7 +108,7 @@ linted, security-reviewed, and documented before the next begins.
 | # | Milestone | Status |
 |---|---|---|
 | 0 | Repository foundation (this repo, DB, Prisma, Redis, tooling) | ✅ |
-| 1 | Auth, users, verification, sessions, personal workspace creation | ⬜ |
+| 1 | Auth, users, verification, sessions, personal workspace creation | ✅ |
 | 2 | Workspaces, memberships, roles, permissions, authorization | ⬜ |
 | 3 | Agent property database (location, media, owner info, search) | ⬜ |
 | 4 | CRM, requirements, matching, presentations/PDFs | ⬜ |

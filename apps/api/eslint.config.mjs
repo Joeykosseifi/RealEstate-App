@@ -32,4 +32,16 @@ export default tseslint.config(
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
+  {
+    // Integration/e2e tests assert on supertest's inherently untyped
+    // response bodies (`res.body.foo`) — that's normal, safe test code,
+    // not a real type-safety risk, so the stricter type-checked rules
+    // are relaxed here only (unit tests under src/**/*.spec.ts keep full
+    // type-checking).
+    files: ['test/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+    },
+  },
 );

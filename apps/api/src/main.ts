@@ -11,6 +11,7 @@ async function bootstrap(): Promise<void> {
 
   app.useLogger(app.get(Logger));
   app.use(helmet());
+  app.setGlobalPrefix('api/v1', { exclude: ['/', 'health'] });
 
   app.useGlobalPipes(
     new ValidationPipe({

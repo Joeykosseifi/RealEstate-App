@@ -5,6 +5,8 @@ import { ConfigModule } from './config/config.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { HealthModule } from './health/health.module';
+import { AuditModule } from './audit/audit.module';
+import { AuthModule } from './auth/auth.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -25,7 +27,9 @@ import { AppService } from './app.service';
     }),
     PrismaModule,
     RedisModule,
+    AuditModule,
     HealthModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [

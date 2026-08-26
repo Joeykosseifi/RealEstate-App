@@ -38,6 +38,26 @@ in [`PERMISSIONS.md`](./PERMISSIONS.md):
 4. **Publication Status** — the separate lifecycle that governs whether a
    property is visible to the public marketplace.
 
+## Registration & accounts (Milestone 1)
+
+Three registration paths — CLIENT, AGENT, COMPANY — determine onboarding
+behavior only; they are never treated as an authorization signal (see
+`docs/PERMISSIONS.md`). All three go through the same account lifecycle:
+registration → email verification + phone OTP verification → activation.
+
+- **CLIENT** activates with no professional workspace — just the
+  marketplace account.
+- **AGENT** activation automatically creates exactly one personal
+  workspace with the agent as its OWNER — the "private professional
+  database ready" moment described in the central value proposition
+  above. This personal workspace is permanent and stays separate from any
+  company the agent later joins.
+- **COMPANY** activation creates the Company record, its company
+  workspace, and an OWNER membership for the person who registered it.
+
+See `docs/API.md` for the concrete endpoints and `docs/DATABASE.md` for
+the activation/idempotency guarantees behind "exactly one" above.
+
 ## Build order
 
 The platform is built milestone by milestone; see the root
