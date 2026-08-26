@@ -7,6 +7,9 @@ import { RedisModule } from './redis/redis.module';
 import { HealthModule } from './health/health.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
+import { AuthorizationModule } from './authorization/authorization.module';
+import { WorkspacesModule } from './workspaces/workspaces.module';
+import { AdminModule } from './admin/admin.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -28,8 +31,11 @@ import { AppService } from './app.service';
     PrismaModule,
     RedisModule,
     AuditModule,
+    AuthorizationModule,
     HealthModule,
     AuthModule,
+    WorkspacesModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [

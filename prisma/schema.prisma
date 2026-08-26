@@ -1,12 +1,16 @@
 // Real Estate Platform — Prisma schema
 //
 // Milestone 0: datasource + generator only.
-// Milestone 1 (this revision): authentication, users, verification,
-// sessions, and the minimum workspace/company/role foundation needed for
-// automatic personal (agent) and company workspace creation on account
-// activation. See docs/DATABASE.md for the full model-introduction
-// schedule and the rationale behind specific design choices (e.g.
-// `User.pendingCompanyProfile`, the workspace type CHECK constraint).
+// Milestone 1: authentication, users, verification, sessions, and the
+// minimum workspace/company/role foundation needed for automatic
+// personal (agent) and company workspace creation on account activation.
+// Milestone 2 (this revision): the full authorization foundation —
+// workspace/platform role scoping, the permission catalog, platform
+// (admin) roles, and the moderation fields user suspension/
+// deactivation/restoration need. See docs/DATABASE.md for the full
+// model-introduction schedule and the rationale behind specific design
+// choices (e.g. `User.pendingCompanyProfile`, the workspace type CHECK
+// constraint, the Role scope/uniqueness design below).
 //
 // Do not add property/CRM/collaboration/subscription models yet — those
 // belong to later milestones.
@@ -71,6 +75,17 @@ enum CompanyAccountStatus {
   SUSPENDED
 }
 
+/// Whether a Role/Permission applies platform-wide (admin capabilities,
+/// held via UserPlatformRole, independent of any workspace membership)
+/// or within a single workspace (held via WorkspaceMember.roleId). A
+/// WORKSPACE-scope role can only ever be granted WORKSPACE-scope
+/// permissions — enforced in RolesService, not just by convention. See
+/// docs/PERMISSIONS.md "Platform vs. workspace scope".
+enum AuthorizationScope {
+  PLATFORM
+  WORKSPACE
+}
+
 // ---------------------------------------------------------------------------
 // Users, sessions, verification, password reset
 // ---------------------------------------------------------------------------
@@ -92,6 +107,24 @@ model User {
   termsAcceptedAt DateTime?
   lastLoginAt     DateTime?
 
+  /// Moderation fields track only the MOST RECENT action of each kind —
+  /// full history (actor, reason, previous/new status, timestamp) lives
+  /// in AuditLog. These are plain scalar "actor" references (not Prisma
+  /// relations) to avoid a self-relation explosion on User; a DB-level
+  /// FK is still added by hand in the Milestone 2 migration. See
+  /// docs/SECURITY.md "Reversible moderation".
+  suspendedAt       DateTime?
+  suspendedByUserId String?   @db.Uuid
+  suspensionReason  String?
+
+  deactivatedAt       DateTime?
+  deactivatedByUserId String?   @db.Uuid
+  deactivationReason  String?
+
+  restoredAt       DateTime?
+  restoredByUserId String?   @db.Uuid
+  restoreReason    String?
+
   /// Transient staging area for a COMPANY registration's company details
   /// (name/email/phone/website/description), captured at registration and
   /// consumed by the activation transaction once the user verifies email
@@ -110,6 +143,7 @@ model User {
   personalWorkspace    Workspace?          @relation("PersonalWorkspaceOwner")
   companiesCreated     Company[]           @relation("CompanyCreatedBy")
   auditLogs            AuditLog[]          @relation("AuditActor")
+  platformRoles        UserPlatformRole[]
 
   @@map("users")
 }
@@ -244,7 +278,8 @@ model Workspace {
   companyId String?  @unique @db.Uuid
   company   Company? @relation(fields: [companyId], references: [id])
 
-  members WorkspaceMember[]
+  members     WorkspaceMember[]
+  customRoles Role[]            @relation("WorkspaceCustomRoles")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -265,9 +300,16 @@ model WorkspaceMember {
   roleId String? @db.Uuid
   role   Role?   @relation(fields: [roleId], references: [id])
 
-  invitedAt DateTime?
-  joinedAt  DateTime?
-  removedAt DateTime?
+  /// Plain scalar actor references (see User's moderation fields for why
+  /// these aren't Prisma relations) — full detail lives in AuditLog.
+  invitedByUserId   String? @db.Uuid
+  suspendedByUserId String? @db.Uuid
+  removedByUserId   String? @db.Uuid
+
+  invitedAt   DateTime?
+  joinedAt    DateTime?
+  suspendedAt DateTime?
+  removedAt   DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -280,37 +322,85 @@ model WorkspaceMember {
   @@map("workspace_members")
 }
 
-/// Named role a membership can carry. Milestone 1 seeds only the system
-/// "OWNER" role (see prisma/seed.ts) and assigns it to workspace owners;
-/// Permission/RolePermission are foundation tables for Milestone 2's
-/// permission engine (see docs/PERMISSIONS.md) and are intentionally
-/// unpopulated beyond that seed for now.
+/// A named, permission-bearing role. Two kinds:
+///
+/// - **System roles** (`isSystem: true`, `workspaceId: null`) — the fixed
+///   catalog seeded by `prisma/seed.ts` (workspace roles like AGENT,
+///   VIEWER, WORKSPACE_OWNER; platform roles like SUPER_ADMIN). Their
+///   `key` must be globally unique — enforced by a hand-added partial
+///   unique index (`WHERE "workspaceId" IS NULL`) in the Milestone 2
+///   migration, since the ordinary composite `@@unique` below does not
+///   by itself stop two different NULL-workspaceId rows from sharing a
+///   key (NULL is never "equal" to NULL in a SQL unique constraint).
+/// - **Custom workspace roles** (`isSystem: false`, `workspaceId` set) —
+///   created by a workspace via `workspace.manage_roles` (e.g. "Senior
+///   Agent"). `key` only needs to be unique within that one workspace,
+///   which the composite `@@unique([workspaceId, key])` does enforce.
+///
+/// `scope` determines what a role's permissions may contain: a
+/// WORKSPACE-scope role can only ever be granted WORKSPACE-scope
+/// permissions (checked in RolesService whenever role-permission
+/// mappings are written, for both system seeding and custom-role
+/// CRUD) — a company admin can never construct a role carrying a
+/// PLATFORM permission. Platform roles are assigned to users directly
+/// via `UserPlatformRole`, never via `WorkspaceMember.roleId`.
 model Role {
-  id          String  @id @default(uuid()) @db.Uuid
-  key         String  @unique
+  id          String             @id @default(uuid()) @db.Uuid
+  key         String
   name        String
   description String?
-  isSystem    Boolean @default(false)
+  scope       AuthorizationScope @default(WORKSPACE)
+  isSystem    Boolean            @default(false)
 
-  permissions RolePermission[]
-  members     WorkspaceMember[]
+  /// Set only for custom (non-system) workspace roles.
+  workspaceId String?    @db.Uuid
+  workspace   Workspace? @relation("WorkspaceCustomRoles", fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  permissions   RolePermission[]
+  members       WorkspaceMember[]
+  platformGrant UserPlatformRole[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([workspaceId, key])
+  @@index([scope])
   @@map("roles")
 }
 
 model Permission {
-  id          String  @id @default(uuid()) @db.Uuid
-  key         String  @unique
+  id          String             @id @default(uuid()) @db.Uuid
+  key         String             @unique
   description String?
+  scope       AuthorizationScope
 
   roles RolePermission[]
 
   createdAt DateTime @default(now())
 
+  @@index([scope])
   @@map("permissions")
+}
+
+/// Grants a PLATFORM-scope Role directly to a User, independent of any
+/// workspace membership — this is how SUPER_ADMIN/PLATFORM_ADMIN/etc.
+/// work without requiring the admin to join every workspace they
+/// administer. RolesService rejects granting a WORKSPACE-scope role here.
+model UserPlatformRole {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId String @db.Uuid
+  role   Role   @relation(fields: [roleId], references: [id])
+
+  /// Plain scalar actor reference — see User's moderation fields.
+  grantedByUserId String? @db.Uuid
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@map("user_platform_roles")
 }
 
 model RolePermission {

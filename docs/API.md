@@ -99,12 +99,59 @@ activation (`AccountActivationService`), which flips `accountStatus` to
 specific product features, not authentication itself; only
 `SUSPENDED`/`DEACTIVATED` block login.
 
-## Workspace context (from Milestone 2)
+## Workspace context (Milestone 2)
 
-Professional-data endpoints require a resolved current workspace
-(typically `X-Workspace-Id` header or route param, validated against the
-authenticated user's active memberships server-side — never trusted
-as-is from the client).
+Workspace-rooted endpoints resolve the workspace from the route's `:id`
+param (or `X-Workspace-Id` header for future non-workspace-rooted
+routes), then verify the caller has an **ACTIVE** membership there —
+never trusted as-is from the client (`WorkspaceContextGuard` +
+`WorkspaceAuthorizationService`). A missing workspace and a
+missing/non-active membership return the identical `403` message, so an
+unauthorized caller can't distinguish "doesn't exist" from "you're not a
+member."
+
+### Workspace endpoints
+
+All under `/api/v1`, all require `Authorization: Bearer <token>`.
+Endpoints marked with a permission require the caller's resolved
+workspace permissions to include it (`@RequireWorkspacePermission`).
+
+| Method & path | Permission | Notes |
+|---|---|---|
+| `GET workspaces` | — | Workspaces the caller can currently switch into (ACTIVE memberships only). |
+| `GET workspaces/:id` | `workspace.view` | Workspace detail plus the caller's fully-resolved permission list for that workspace. |
+| `GET workspaces/:id/members` | `team.view` | Full roster, all statuses. |
+| `POST workspaces/:id/invitations` | `team.invite` | `{ email, membershipType, roleId? }`. Target must already be a registered user (inviting a not-yet-registered email is Milestone 8); `roleId` defaults to the system `AGENT` role. `201`. |
+| `POST workspaces/:id/invitations/accept` | — (any authenticated user) | Accepts the caller's own pending invitation. `204`. |
+| `POST workspaces/:id/members/:memberId/suspend` | `team.suspend` | `{ reason? }`. Blocked (`409`) if it would leave the workspace with zero active owners. `204`. |
+| `POST workspaces/:id/members/:memberId/remove` | `team.remove` | Same owner protection as suspend. `204`. |
+| `PATCH workspaces/:id/members/:memberId/role` | `team.assign_role` | `{ roleId }`. Rejected (`403`) for an `OWNER` membership — use ownership transfer instead (not yet implemented). |
+| `GET workspaces/:id/roles` | `workspace.view` | System + this workspace's custom roles. |
+| `POST workspaces/:id/roles` | `workspace.manage_roles` | `{ key, name, description?, permissionKeys[] }`. `403` if any requested key is `PLATFORM`-scope — see `docs/PERMISSIONS.md`. |
+| `PATCH workspaces/:id/roles/:roleId` | `workspace.manage_roles` | Custom roles only (not system roles). |
+| `DELETE workspaces/:id/roles/:roleId` | `workspace.manage_roles` | `409` if the role is currently assigned to any member. |
+
+### Admin endpoints (Milestone 2)
+
+All under `/api/v1/admin`, all require `Authorization: Bearer <token>`
+plus the named **platform** permission (`@RequirePlatformPermission`) —
+entirely independent of any workspace membership.
+
+| Method & path | Permission | Notes |
+|---|---|---|
+| `GET admin/users` | `admin.users.view` | Paginated (`page`/`pageSize`), filterable by `search`, `accountType`, `accountStatus`, `verification`. `email`/`phone` present only if the caller also has `admin.users.view_email`. |
+| `GET admin/users/:id` | `admin.users.view` | Includes workspace memberships and platform role grants. |
+| `POST admin/users/:id/suspend` | `admin.users.suspend` | `{ reason }` (required). Revokes all sessions immediately. `409` if this is the last active `SUPER_ADMIN`. `204`. |
+| `POST admin/users/:id/deactivate` | `admin.users.deactivate` | Same shape/protections as suspend. `204`. |
+| `POST admin/users/:id/restore` | `admin.users.restore` | `{ reason? }`. `409` unless the account is currently `SUSPENDED`/`DEACTIVATED`. `204`. |
+| `POST admin/users/:id/platform-roles` | `admin.roles.manage` | `{ roleKey }` (one of the seeded platform roles). `409` if already held. `204`. |
+| `DELETE admin/users/:id/platform-roles/:roleKey` | `admin.roles.manage` | `409` if revoking the last active `SUPER_ADMIN` grant. `204`. |
+| `GET admin/companies` | `admin.companies.view` | Paginated company listing. |
+| `POST admin/companies/:id/suspend` | `admin.companies.suspend` | Reversible. `204`. |
+| `POST admin/companies/:id/restore` | `admin.companies.restore` | `204`. |
+
+Moderation is always reversible — suspend/deactivate/restore never
+delete a row; see `docs/SECURITY.md` "Reversible moderation."
 
 ## N+1 prevention
 

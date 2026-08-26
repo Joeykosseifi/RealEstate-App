@@ -42,7 +42,7 @@ npm run docker:up
 npm run prisma:generate
 npm run prisma:migrate
 
-npm run prisma:seed         # seeds the system OWNER role
+npm run prisma:seed         # seeds the permission catalog + system roles (idempotent)
 
 # Run the API
 npm run dev:api        # http://localhost:3000 — GET /health, POST /api/v1/auth/...
@@ -109,7 +109,7 @@ linted, security-reviewed, and documented before the next begins.
 |---|---|---|
 | 0 | Repository foundation (this repo, DB, Prisma, Redis, tooling) | ✅ |
 | 1 | Auth, users, verification, sessions, personal workspace creation | ✅ |
-| 2 | Workspaces, memberships, roles, permissions, authorization | ⬜ |
+| 2 | Workspaces, memberships, roles, permissions, authorization | ✅ |
 | 3 | Agent property database (location, media, owner info, search) | ⬜ |
 | 4 | CRM, requirements, matching, presentations/PDFs | ⬜ |
 | 5 | Publication workflow & admin moderation | ⬜ |

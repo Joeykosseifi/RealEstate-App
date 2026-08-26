@@ -100,3 +100,90 @@ export async function registerVerifiedAgent(
   const tokens = await login(testApp, user);
   return { ...user, ...tokens };
 }
+
+export interface VerifiedCompanyOwner extends RegisteredUser, LoggedInTokens {
+  workspaceId: string;
+  companyId: string;
+}
+
+/** Registers a company, verifies + logs in the owner, and resolves their workspace id. */
+export async function registerVerifiedCompanyOwner(
+  testApp: TestApp,
+  companyName = 'Test Co',
+): Promise<VerifiedCompanyOwner> {
+  const user = await registerCompany(testApp, { companyName });
+  await verifyEmailAndPhone(testApp, user);
+  const tokens = await login(testApp, user);
+
+  const membership = await testApp.prisma.workspaceMember.findFirstOrThrow({
+    where: { userId: user.id, membershipType: 'OWNER' },
+    include: { workspace: true },
+  });
+
+  return {
+    ...user,
+    ...tokens,
+    workspaceId: membership.workspaceId,
+    companyId: membership.workspace.companyId!,
+  };
+}
+
+export interface EmployeeMember extends RegisteredUser, LoggedInTokens {
+  membershipId: string;
+}
+
+/**
+ * Registers+verifies a fresh agent, has the workspace owner invite them,
+ * then has the new member log in and accept — the common setup for
+ * membership/permission tests that need a second, non-owner member.
+ */
+export async function inviteAndActivateEmployee(
+  testApp: TestApp,
+  workspaceId: string,
+  ownerAccessToken: string,
+  options: { membershipType?: string; roleId?: string } = {},
+): Promise<EmployeeMember> {
+  const employee = await registerAgent(testApp);
+  await verifyEmailAndPhone(testApp, employee);
+
+  await request(testApp.app.getHttpServer())
+    .post(`/api/v1/workspaces/${workspaceId}/invitations`)
+    .set('Authorization', `Bearer ${ownerAccessToken}`)
+    .send({
+      email: employee.email,
+      membershipType: options.membershipType ?? 'EMPLOYEE',
+      ...(options.roleId ? { roleId: options.roleId } : {}),
+    })
+    .expect(201);
+
+  const tokens = await login(testApp, employee);
+
+  await request(testApp.app.getHttpServer())
+    .post(`/api/v1/workspaces/${workspaceId}/invitations/accept`)
+    .set('Authorization', `Bearer ${tokens.accessToken}`)
+    .expect(204);
+
+  const membership = await testApp.prisma.workspaceMember.findUniqueOrThrow({
+    where: { workspaceId_userId: { workspaceId, userId: employee.id } },
+  });
+
+  return { ...employee, ...tokens, membershipId: membership.id };
+}
+
+/** Grants a platform role directly (bypassing the bootstrap script) for test setup. */
+export async function grantPlatformRole(
+  testApp: TestApp,
+  userId: string,
+  roleKey: string,
+): Promise<void> {
+  const role = await testApp.prisma.role.findFirstOrThrow({
+    where: { key: roleKey, scope: 'PLATFORM' },
+  });
+  await testApp.prisma.userPlatformRole.create({
+    data: { userId, roleId: role.id },
+  });
+}
+
+export function authHeader(accessToken: string): [string, string] {
+  return ['Authorization', `Bearer ${accessToken}`];
+}

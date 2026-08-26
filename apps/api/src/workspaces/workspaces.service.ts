@@ -10,7 +10,7 @@ export interface PendingCompanyProfile {
   description?: string;
 }
 
-const OWNER_ROLE_KEY = 'OWNER';
+const OWNER_ROLE_KEY = 'WORKSPACE_OWNER';
 
 /**
  * Creates the workspace foundation an activated account needs. Every
@@ -35,8 +35,8 @@ export class WorkspacesService {
     ownerUserId: string,
     displayName: string,
   ): Promise<Workspace> {
-    const ownerRole = await tx.role.findUnique({
-      where: { key: OWNER_ROLE_KEY },
+    const ownerRole = await tx.role.findFirst({
+      where: { workspaceId: null, key: OWNER_ROLE_KEY },
     });
 
     const workspace = await tx.workspace.upsert({
@@ -89,8 +89,8 @@ export class WorkspacesService {
     ownerUserId: string,
     profile: PendingCompanyProfile,
   ): Promise<{ company: Company; workspace: Workspace }> {
-    const ownerRole = await tx.role.findUnique({
-      where: { key: OWNER_ROLE_KEY },
+    const ownerRole = await tx.role.findFirst({
+      where: { workspaceId: null, key: OWNER_ROLE_KEY },
     });
 
     const company = await tx.company.create({

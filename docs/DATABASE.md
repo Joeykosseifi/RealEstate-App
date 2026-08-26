@@ -6,26 +6,30 @@
   migration under `prisma/migrations/`. Never mutate the database outside
   of a migration.
 
-## Current state (Milestone 1)
+## Current state (Milestone 2)
 
 Milestone 0 shipped only the `datasource`/`generator` blocks. Milestone 1
-adds authentication, users, verification, sessions, and the minimum
+added authentication, users, verification, sessions, and the minimum
 workspace/company/role foundation needed for automatic workspace creation
-on account activation (full workspace management is Milestone 2).
+on account activation. Milestone 2 builds the full workspace/permission
+engine and platform admin authorization on top of that foundation.
 
 ### Models
 
 | Model | Purpose |
 |---|---|
-| `User` | Account record for all three registration paths (CLIENT/AGENT/COMPANY) |
+| `User` | Account record for all three registration paths (CLIENT/AGENT/COMPANY); Milestone 2 adds moderation fields (`suspendedAt`/`suspendedByUserId`/`suspensionReason`, `deactivatedAt`/`deactivatedByUserId`/`deactivationReason`, `restoredAt`/`restoredByUserId`/`restoreReason`) |
 | `UserSession` | One row per device/session; holds only a hash of the current refresh token |
 | `EmailVerification` | Link-style email verification tokens (hashed, one-time, expiring) |
 | `PhoneVerification` | Numeric OTP phone verification (hashed, one-time, expiring, attempt-limited) |
 | `PasswordReset` | Password reset tokens (hashed, one-time, expiring) |
 | `Company` | Foundation fields for a registered company |
-| `Workspace` | `PERSONAL` (one per agent) or `COMPANY` (one per company) |
-| `WorkspaceMember` | Membership + `membershipType`/`status`, optionally a `Role` |
-| `Role` / `Permission` / `RolePermission` | Foundation for Milestone 2's permission engine; Milestone 1 seeds only a system `OWNER` role |
+| `Workspace` | `PERSONAL` (one per agent) or `COMPANY` (one per company); now also owns its `customRoles` |
+| `WorkspaceMember` | Membership + `membershipType`/`status` (`INVITED`/`ACTIVE`/`SUSPENDED`/`REMOVED`), optionally a `Role`; Milestone 2 adds `invitedByUserId`, `suspendedByUserId`, `suspendedAt`, `removedByUserId` |
+| `Role` | System (`workspaceId: null`) or custom per-workspace roles. Milestone 2 adds `scope` (`WORKSPACE`\|`PLATFORM`) and `workspaceId`; `key` is unique per workspace, plus a hand-added partial unique index enforcing system-role keys are globally unique among `workspaceId IS NULL` rows |
+| `Permission` | Milestone 2 adds `scope` (`WORKSPACE`\|`PLATFORM`) and is now populated (49 seeded keys — see `docs/PERMISSIONS.md`) |
+| `RolePermission` | Join table, unchanged shape from Milestone 1 |
+| `UserPlatformRole` | **New in Milestone 2.** Grants a `PLATFORM`-scope role directly to a user, independent of any workspace membership (`@@unique([userId, roleId])`) |
 | `AuditLog` | Append-only audit trail (see `docs/SECURITY.md`) |
 
 ### Design decisions worth knowing
@@ -50,6 +54,20 @@ on account activation (full workspace management is Milestone 2).
   user at the database level. `Workspace.companyId` is unique similarly.
   `WorkspaceMember` has `@@unique([workspaceId, userId])`, so a user can
   never hold two membership rows in the same workspace.
+- **Partial unique index for system role keys (Milestone 2).** A plain
+  `@@unique([workspaceId, key])` doesn't prevent two different
+  `workspaceId: null` (system) rows from sharing a key, because SQL
+  never treats `NULL = NULL` as a uniqueness match. A hand-added
+  migration statement, `CREATE UNIQUE INDEX "roles_system_key_unique" ON
+  "roles"("key") WHERE "workspaceId" IS NULL`, closes that gap
+  declaratively rather than relying on seed-script discipline.
+- **Scope enforcement lives in application code, not a DB constraint
+  (Milestone 2).** Postgres has no clean way to express "a
+  `RolePermission` row is only valid if `Role.scope = Permission.scope`"
+  as a constraint across a join table, so this is enforced in
+  `RolesService.resolveWorkspacePermissions()` at write time instead —
+  see `docs/PERMISSIONS.md` for why this is still a hard guarantee, not
+  just a convention.
 
 ### Activation & idempotency
 
@@ -70,7 +88,7 @@ exercise this directly.
 | Milestone | Models introduced |
 |---|---|
 | 1 | ✅ `User`, `UserSession`, `EmailVerification`, `PhoneVerification`, `PasswordReset`, `Company`, `Workspace`, `WorkspaceMember`, `Role`, `Permission`, `RolePermission`, `AuditLog` |
-| 2 | Full workspace management API, permission enforcement engine |
+| 2 | ✅ `UserPlatformRole`; `Role`/`Permission` scope split; full workspace management + admin authorization API |
 | 3 | `Property`, property media, owner info, private notes, location |
 | 4 | CRM `Client`, `ClientRequirement`, match results, `Presentation` |
 | 5 | Publication review/moderation records |
@@ -103,6 +121,14 @@ exercise this directly.
 cp .env.example .env
 npm run docker:up            # starts Postgres + Redis
 npm run prisma:generate
-npm run prisma:migrate       # applies the milestone1_auth_users_workspaces migration
-npm run prisma:seed          # seeds the system "OWNER" role
+npm run prisma:migrate       # applies both migrations (Milestone 1 + Milestone 2)
+npm run prisma:seed          # seeds the permission catalog + system roles (idempotent)
+```
+
+To grant the first `SUPER_ADMIN` (no HTTP endpoint does this — see
+`docs/PERMISSIONS.md` "Super Admin bootstrap"):
+
+```bash
+cd apps/api
+SUPER_ADMIN_BOOTSTRAP_EMAIL=you@example.com npm run admin:bootstrap
 ```

@@ -84,18 +84,64 @@ Authorization (Milestone 2+) remains a forward statement.
   password reset, but isn't exposed as its own endpoint yet — deferred
   per the instruction to only build what naturally fits Milestone 1).
 
-## Authorization (Milestone 2+)
+## Authorization (Milestone 2 — implemented for workspaces/admin; entity-level ownership below is still a forward statement for Milestone 3+)
 
 - Enforced server-side only. The frontend is never trusted for
   ownership, role, workspace, or permission values.
-- Default-deny: absence of a permission means no access.
-- Every professional-data request resolves, in order: authenticated user
-  → current workspace → active membership in that workspace → role →
-  required permission → entity ownership → collaboration grant (if
-  applicable).
-- Permissions are independent and do not imply each other (e.g.
-  `property.view` never implies `property.view_owner`). See
+- Default-deny throughout: a missing workspace, a missing or non-`ACTIVE`
+  membership, a user with no platform role grants — all resolve to zero
+  permissions / a thrown `ForbiddenException`, never an implicit allow
+  (`WorkspaceAuthorizationService`, `PlatformAuthorizationService`).
+- **Workspace scope and platform scope are structurally separate**, not
+  just conventionally separate: every `Role` and `Permission` carries an
+  `AuthorizationScope` (`WORKSPACE` | `PLATFORM`), and `RolesService`
+  refuses to attach a platform permission to a workspace role. A company
+  admin — however powerful inside their own workspace — can never obtain
+  an `admin.*` permission; a `SUPER_ADMIN` administers the platform
+  without needing membership in any workspace. See
   `docs/PERMISSIONS.md`.
+- Reusable guard/decorator pattern, not duplicated per controller:
+  `@RequireWorkspacePermission(key)` resolves the workspace from the
+  route and checks the caller's membership-derived permissions;
+  `@RequirePlatformPermission(key)` checks the caller's platform-role-
+  derived permissions, independent of workspace membership. Controllers
+  stay thin — no inline permission checks.
+- Full professional-data ownership/collaboration resolution (property,
+  CRM, etc.) is Milestone 3+; the permission keys exist in the catalog
+  today as a foundation but are not yet enforced by any endpoint.
+
+## Reversible moderation (Milestone 2)
+
+- User suspension/deactivation/restoration and workspace member
+  suspension/removal are **never a hard delete.** Each action stamps
+  actor id, reason, and timestamp directly on the affected row and
+  writes an append-only `AuditLog` entry. `restore` is always available
+  from `SUSPENDED`/`DEACTIVATED` back to `ACTIVE` (`409` if the account
+  isn't in one of those states).
+- Suspending or deactivating a user immediately revokes every session
+  (`SessionsService.revokeAllForUser`) and is rechecked on every
+  authenticated request via `JwtStrategy` — a suspension is not
+  eventually-consistent with the access token's remaining TTL, it takes
+  effect on the very next request.
+- **Owner lockout protection:** a workspace can never end up with zero
+  active `OWNER` members — suspending/removing the last one returns
+  `409`. **Super Admin lockout protection:** the platform can never end
+  up with zero active `SUPER_ADMIN` users — suspending, deactivating, or
+  revoking the platform role from the last one returns `409`. Both are
+  enforced with a `SELECT ... FOR UPDATE` row lock taken *before*
+  counting survivors, inside a transaction, so two concurrent
+  conflicting requests can't both observe "one other remains" and both
+  succeed — see the concurrency tests in
+  `apps/api/test/workspace-membership.e2e-spec.ts` and
+  `apps/api/test/admin-platform.e2e-spec.ts`.
+- **Admin email access is a distinct, opt-in permission**
+  (`admin.users.view_email`), separate from `admin.users.view`. An admin
+  without it never receives `email`/`phone` in a user summary/detail —
+  the fields are omitted, never masked or replaced with a placeholder.
+- There is no HTTP endpoint that grants the first `SUPER_ADMIN` — see
+  `apps/api/scripts/bootstrap-super-admin.ts` (`npm run admin:bootstrap`
+  inside `apps/api`), which requires the target user to already exist
+  and records an audit entry with `actorUserId: null`.
 
 ## Data isolation
 
@@ -124,11 +170,18 @@ Authorization (Milestone 2+) remains a forward statement.
   `AuditService.log()`. Milestone 1 records: `account.registered`,
   `account.activated`, `auth.login_success`, `auth.logout`,
   `auth.password_reset`, `email.verified`, `phone.verified`,
-  `workspace.personal_created`, `workspace.company_created`.
+  `workspace.personal_created`, `workspace.company_created`. Milestone 2
+  adds: `workspace.member_invited`, `workspace.member_activated`,
+  `workspace.member_suspended`, `workspace.member_removed`,
+  `workspace.role_assigned`, `workspace.role_created`,
+  `workspace.role_updated`, `workspace.role_deleted`,
+  `admin.user_suspended`, `admin.user_deactivated`,
+  `admin.user_restored`, `admin.platform_role_assigned`,
+  `admin.platform_role_removed`.
 - Never logged: passwords, access tokens, refresh tokens, OTP codes,
   reset tokens, full payment credentials. `AuditLog.metadata` is only
   ever given non-secret structured context (e.g. `{ accountType }`,
-  `{ companyId }`).
+  `{ companyId }`, `{ reason }`).
 
 ## Secrets
 
