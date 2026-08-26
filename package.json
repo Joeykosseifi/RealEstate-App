@@ -1,0 +1,44 @@
+{
+  "name": "real-estate-platform",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Real Estate management and marketplace platform monorepo",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run start:dev --workspace apps/api",
+    "dev:admin": "npm run dev --workspace apps/admin-web",
+    "dev:mobile": "npm run start --workspace apps/mobile",
+    "build:packages": "npm run build --workspace packages/config --workspace packages/types --workspace packages/validation --workspace packages/ui",
+    "build": "npm run build:packages && npm run build --workspace apps/api --workspace apps/admin-web --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\" --ignore-path .prettierignore",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\" --ignore-path .prettierignore",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "prisma:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
+    "prisma:studio": "prisma studio --schema prisma/schema.prisma",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "postinstall": "npm run build:packages"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "eslint": "^9.18.0",
+    "eslint-config-prettier": "^10.0.1",
+    "globals": "^17.0.0",
+    "next": "16.3.3",
+    "prettier": "^3.4.2",
+    "prisma": "^6.2.1",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0"
+  }
+}

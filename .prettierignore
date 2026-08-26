@@ -1,0 +1,10 @@
+node_modules
+dist
+build
+out
+.next
+.expo
+coverage
+package-lock.json
+prisma/generated
+*.md

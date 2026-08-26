@@ -1,0 +1,16 @@
+// Real Estate Platform — Prisma schema
+//
+// Milestone 0 (this file): datasource + generator only. No business models
+// yet. Domain models (User, Session, Workspace, Membership, Property, ...)
+// are introduced starting Milestone 1, one milestone at a time, per
+// docs/DATABASE.md. Do not add business models here ahead of their
+// milestone — see the build order in the repository root README.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
