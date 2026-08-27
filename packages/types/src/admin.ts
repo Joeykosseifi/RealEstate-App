@@ -36,7 +36,7 @@ export interface AdminCompanySummary {
   phone: string | null;
   website: string | null;
   verificationStatus: 'PENDING' | 'VERIFIED' | 'REJECTED';
-  accountStatus: 'ACTIVE' | 'SUSPENDED';
+  accountStatus: 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED';
   createdByUserId: string;
   createdAt: string;
 }

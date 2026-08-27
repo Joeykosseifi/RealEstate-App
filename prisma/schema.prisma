@@ -73,6 +73,7 @@ enum CompanyVerificationStatus {
 enum CompanyAccountStatus {
   ACTIVE
   SUSPENDED
+  DEACTIVATED
 }
 
 /// Whether a Role/Permission applies platform-wide (admin capabilities,

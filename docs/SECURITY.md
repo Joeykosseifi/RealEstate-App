@@ -112,12 +112,37 @@ Authorization (Milestone 2+) remains a forward statement.
 
 ## Reversible moderation (Milestone 2)
 
-- User suspension/deactivation/restoration and workspace member
-  suspension/removal are **never a hard delete.** Each action stamps
-  actor id, reason, and timestamp directly on the affected row and
-  writes an append-only `AuditLog` entry. `restore` is always available
-  from `SUSPENDED`/`DEACTIVATED` back to `ACTIVE` (`409` if the account
-  isn't in one of those states).
+- User suspension/deactivation/restoration, company
+  suspension/deactivation/restoration, and workspace member
+  suspension/removal are **never a hard delete.** Every action records
+  actor + timestamp (via the affected row's own columns for users, and
+  via the append-only `AuditLog` entry for all three), plus a reason
+  (required at the platform-admin level, optional at the workspace
+  level — see "Moderation reason: two-tier design" below). `restore` is
+  always available from `SUSPENDED`/`DEACTIVATED` back to `ACTIVE`
+  (`409` if the account/company isn't in one of those states).
+- **Company deactivation is independent of user deactivation.**
+  Deactivating a company (`POST /admin/companies/:id/deactivate`, gated
+  by `admin.companies.deactivate`) only flips
+  `Company.accountStatus`; it never revokes the registering owner's
+  sessions, never changes `User.accountStatus`, and never touches the
+  company's `Workspace` or any `WorkspaceMember` row — ownership is
+  never transferred to the admin/platform. See
+  `docs/PERMISSIONS.md` "Company vs. user deactivation" and
+  `apps/api/test/admin-company-moderation.e2e-spec.ts`.
+- **Moderation reason: two-tier design.** Platform-admin actions
+  (`ModerationActionDto`) require a reason; workspace-level member
+  suspend/remove (`ModerationReasonDto`) leaves it optional. This is a
+  deliberate, documented distinction — see
+  `docs/PERMISSIONS.md` "Moderation reason: two-tier design" — not an
+  inconsistency to fix.
+- **Future content moderation** (Milestone 5) will follow the same
+  reversible pattern: `PUBLISHED → ADMIN_UNPUBLISHED → RESTORED` or
+  `PUBLISHED → ADMIN_UNPUBLISHED → ARCHIVED → RESTORED`, preserving
+  ownership, audit history, reason, timestamps, and business
+  relationships — see `docs/PERMISSIONS.md` "Future content moderation
+  lifecycle." The `admin.content.*` permission keys exist today; no
+  content model or endpoint exists yet.
 - Suspending or deactivating a user immediately revokes every session
   (`SessionsService.revokeAllForUser`) and is rechecked on every
   authenticated request via `JwtStrategy` — a suspension is not
@@ -177,7 +202,8 @@ Authorization (Milestone 2+) remains a forward statement.
   `workspace.role_updated`, `workspace.role_deleted`,
   `admin.user_suspended`, `admin.user_deactivated`,
   `admin.user_restored`, `admin.platform_role_assigned`,
-  `admin.platform_role_removed`.
+  `admin.platform_role_removed`, `admin.company_suspended`,
+  `admin.company_deactivated`, `admin.company_restored`.
 - Never logged: passwords, access tokens, refresh tokens, OTP codes,
   reset tokens, full payment credentials. `AuditLog.metadata` is only
   ever given non-secret structured context (e.g. `{ accountType }`,

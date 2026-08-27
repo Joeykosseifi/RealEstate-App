@@ -120,7 +120,7 @@ workspace permissions to include it (`@RequireWorkspacePermission`).
 |---|---|---|
 | `GET workspaces` | — | Workspaces the caller can currently switch into (ACTIVE memberships only). |
 | `GET workspaces/:id` | `workspace.view` | Workspace detail plus the caller's fully-resolved permission list for that workspace. |
-| `GET workspaces/:id/members` | `team.view` | Full roster, all statuses. |
+| `GET workspaces/:id/members` | `team.view` | Paginated roster, all statuses (`page`/`pageSize`, default 20, max 100). Stable order: status, then `createdAt`, then `id` as tiebreaker. |
 | `POST workspaces/:id/invitations` | `team.invite` | `{ email, membershipType, roleId? }`. Target must already be a registered user (inviting a not-yet-registered email is Milestone 8); `roleId` defaults to the system `AGENT` role. `201`. |
 | `POST workspaces/:id/invitations/accept` | — (any authenticated user) | Accepts the caller's own pending invitation. `204`. |
 | `POST workspaces/:id/members/:memberId/suspend` | `team.suspend` | `{ reason? }`. Blocked (`409`) if it would leave the workspace with zero active owners. `204`. |
@@ -147,8 +147,9 @@ entirely independent of any workspace membership.
 | `POST admin/users/:id/platform-roles` | `admin.roles.manage` | `{ roleKey }` (one of the seeded platform roles). `409` if already held. `204`. |
 | `DELETE admin/users/:id/platform-roles/:roleKey` | `admin.roles.manage` | `409` if revoking the last active `SUPER_ADMIN` grant. `204`. |
 | `GET admin/companies` | `admin.companies.view` | Paginated company listing. |
-| `POST admin/companies/:id/suspend` | `admin.companies.suspend` | Reversible. `204`. |
-| `POST admin/companies/:id/restore` | `admin.companies.restore` | `204`. |
+| `POST admin/companies/:id/suspend` | `admin.companies.suspend` | `{ reason }` (required). Reversible. `204`. |
+| `POST admin/companies/:id/deactivate` | `admin.companies.deactivate` | `{ reason }` (required). Independent of the registering owner's user account — see `docs/PERMISSIONS.md` "Company vs. user deactivation." `409` if already `DEACTIVATED`. `204`. |
+| `POST admin/companies/:id/restore` | `admin.companies.restore` | `{ reason? }`. `409` unless the company is currently `SUSPENDED`/`DEACTIVATED`. `204`. |
 
 Moderation is always reversible — suspend/deactivate/restore never
 delete a row; see `docs/SECURITY.md` "Reversible moderation."

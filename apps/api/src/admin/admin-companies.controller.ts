@@ -41,6 +41,17 @@ export class AdminCompaniesController {
     await this.adminCompanies.suspend(id, actor.userId, dto.reason);
   }
 
+  @Post(':id/deactivate')
+  @RequirePlatformPermission(PERMISSIONS.ADMIN_COMPANIES_DEACTIVATE.key)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deactivate(
+    @Param('id') id: string,
+    @CurrentUser() actor: AuthenticatedRequestUser,
+    @Body() dto: ModerationActionDto,
+  ): Promise<void> {
+    await this.adminCompanies.deactivate(id, actor.userId, dto.reason);
+  }
+
   @Post(':id/restore')
   @RequirePlatformPermission(PERMISSIONS.ADMIN_COMPANIES_RESTORE.key)
   @HttpCode(HttpStatus.NO_CONTENT)

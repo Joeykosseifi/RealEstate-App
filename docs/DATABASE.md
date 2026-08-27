@@ -23,7 +23,7 @@ engine and platform admin authorization on top of that foundation.
 | `EmailVerification` | Link-style email verification tokens (hashed, one-time, expiring) |
 | `PhoneVerification` | Numeric OTP phone verification (hashed, one-time, expiring, attempt-limited) |
 | `PasswordReset` | Password reset tokens (hashed, one-time, expiring) |
-| `Company` | Foundation fields for a registered company |
+| `Company` | Foundation fields for a registered company; `accountStatus` (`CompanyAccountStatus`) gained a `DEACTIVATED` value alongside `ACTIVE`/`SUSPENDED`, added in the follow-up `20260827141336_milestone2_company_deactivation` migration, to support the reversible `POST /admin/companies/:id/deactivate` endpoint (see `docs/PERMISSIONS.md` "Company vs. user deactivation") |
 | `Workspace` | `PERSONAL` (one per agent) or `COMPANY` (one per company); now also owns its `customRoles` |
 | `WorkspaceMember` | Membership + `membershipType`/`status` (`INVITED`/`ACTIVE`/`SUSPENDED`/`REMOVED`), optionally a `Role`; Milestone 2 adds `invitedByUserId`, `suspendedByUserId`, `suspendedAt`, `removedByUserId` |
 | `Role` | System (`workspaceId: null`) or custom per-workspace roles. Milestone 2 adds `scope` (`WORKSPACE`\|`PLATFORM`) and `workspaceId`; `key` is unique per workspace, plus a hand-added partial unique index enforcing system-role keys are globally unique among `workspaceId IS NULL` rows |

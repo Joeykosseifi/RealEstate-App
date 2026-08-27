@@ -24,13 +24,16 @@ function toAdminCompanySummary(company: Company): AdminCompanySummary {
 }
 
 /**
- * Minimal admin company moderation — list/suspend/restore, mirroring the
- * user moderation reversible-moderation pattern. Company "deactivate" is
- * deliberately not implemented yet: unlike a user, a company has no
- * session of its own to revoke, and the product distinction between
- * "suspended" and "deactivated" for a company hasn't been specified —
- * `admin.companies.deactivate` is still seeded in the permission catalog
- * for when that's designed.
+ * Admin company moderation — list/suspend/deactivate/restore, mirroring
+ * the user moderation reversible-moderation pattern (see
+ * docs/SECURITY.md "Reversible moderation"). Never a hard delete: the
+ * company row, its workspace, its memberships, and its
+ * (future-milestone) property data are all untouched by any action
+ * here — only `Company.accountStatus` changes. Deactivating a company
+ * does not touch the registering owner's `User.accountStatus` or any
+ * other user's personal workspace — company-level and user-level
+ * moderation are deliberately independent (see
+ * docs/PERMISSIONS.md "Company vs. user deactivation").
  */
 @Injectable()
 export class AdminCompaniesService {
@@ -98,6 +101,43 @@ export class AdminCompaniesService {
     });
   }
 
+  /**
+   * Deactivates a company. Reversible — see `restore()`. Never deletes
+   * the `Company` row, its `Workspace`, or any `WorkspaceMember`
+   * (memberships/history are preserved for restoration), and never
+   * transfers `createdByUserId` ownership. Deliberately does not touch
+   * the registering owner's `User.accountStatus` — a company being
+   * deactivated does not deactivate the person who created it.
+   */
+  async deactivate(
+    companyId: string,
+    actorUserId: string,
+    reason: string,
+  ): Promise<void> {
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+    });
+    if (!company) {
+      throw new NotFoundException('Company not found.');
+    }
+    if (company.accountStatus === 'DEACTIVATED') {
+      throw new ConflictException('Company is already deactivated.');
+    }
+
+    await this.prisma.company.update({
+      where: { id: companyId },
+      data: { accountStatus: 'DEACTIVATED' },
+    });
+
+    await this.audit.log({
+      actorUserId,
+      action: 'admin.company_deactivated',
+      targetType: 'Company',
+      targetId: companyId,
+      metadata: { reason },
+    });
+  }
+
   async restore(
     companyId: string,
     actorUserId: string,
@@ -109,8 +149,13 @@ export class AdminCompaniesService {
     if (!company) {
       throw new NotFoundException('Company not found.');
     }
-    if (company.accountStatus !== 'SUSPENDED') {
-      throw new ConflictException('Only suspended companies can be restored.');
+    if (
+      company.accountStatus !== 'SUSPENDED' &&
+      company.accountStatus !== 'DEACTIVATED'
+    ) {
+      throw new ConflictException(
+        'Only suspended or deactivated companies can be restored.',
+      );
     }
 
     await this.prisma.company.update({
@@ -123,7 +168,7 @@ export class AdminCompaniesService {
       action: 'admin.company_restored',
       targetType: 'Company',
       targetId: companyId,
-      metadata: { reason },
+      metadata: { reason, previousStatus: company.accountStatus },
     });
   }
 }

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type {
+  Paginated,
   WorkspaceMemberSummary,
   WorkspaceSummary,
 } from '@real-estate/types';
@@ -8,6 +9,7 @@ import {
   toWorkspaceMemberSummary,
   toWorkspaceSummary,
 } from './workspace.mapper';
+import type { ListWorkspaceMembersQueryDto } from './dto/list-workspace-members-query.dto';
 
 /**
  * Read-only workspace queries: the "which workspaces can I switch into"
@@ -28,12 +30,41 @@ export class WorkspaceDirectoryService {
     return memberships.map(toWorkspaceSummary);
   }
 
-  async listMembers(workspaceId: string): Promise<WorkspaceMemberSummary[]> {
-    const members = await this.prisma.workspaceMember.findMany({
-      where: { workspaceId },
-      include: { user: true, role: true },
-      orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
-    });
-    return members.map(toWorkspaceMemberSummary);
+  /**
+   * Paginated roster for one workspace, all statuses. `workspaceId` is
+   * always resolved server-side by the caller (WorkspaceContextGuard,
+   * from an already-authorized membership) — this never accepts it as
+   * unvalidated client input, so there is no cross-workspace leakage.
+   * `id` is appended as a tiebreaker after status/createdAt so ordering
+   * (and therefore pagination) stays stable even when two rows share a
+   * millisecond-precision createdAt.
+   */
+  async listMembers(
+    workspaceId: string,
+    query: ListWorkspaceMembersQueryDto = {},
+  ): Promise<Paginated<WorkspaceMemberSummary>> {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+
+    const [members, totalItems] = await Promise.all([
+      this.prisma.workspaceMember.findMany({
+        where: { workspaceId },
+        include: { user: true, role: true },
+        orderBy: [{ status: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.workspaceMember.count({ where: { workspaceId } }),
+    ]);
+
+    return {
+      items: members.map(toWorkspaceMemberSummary),
+      meta: {
+        page,
+        pageSize,
+        totalItems,
+        totalPages: Math.ceil(totalItems / pageSize),
+      },
+    };
   }
 }

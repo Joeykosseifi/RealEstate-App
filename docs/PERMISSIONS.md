@@ -201,11 +201,105 @@ the real value. See `toAdminUserSummary`/`toAdminUserDetail` in
 
 ## Reversible moderation
 
-Suspending, deactivating, or restoring a user (or a workspace member)
-**never deletes a row.** Every action stamps actor + reason + timestamp
-on the record itself and writes an append-only `AuditLog` entry; restore
-is always available from `SUSPENDED`/`DEACTIVATED` back to `ACTIVE`. See
+Suspending, deactivating, or restoring a user, a company, or a workspace
+member **never deletes a row.** Every action writes an append-only
+`AuditLog` entry recording actor, action, target, and reason; restore is
+always available from `SUSPENDED`/`DEACTIVATED` back to `ACTIVE`. See
 `docs/SECURITY.md` "Reversible moderation."
+
+## Company vs. user deactivation (Milestone 2)
+
+These are two **independent** concepts, deliberately never linked:
+
+- **Company deactivation** (`POST /admin/companies/:id/deactivate`,
+  gated by `admin.companies.deactivate`) sets `Company.accountStatus =
+  DEACTIVATED`. It does **not** touch the registering owner's
+  `User.accountStatus`, does **not** revoke that user's sessions, and
+  does **not** delete or reassign the company's `Workspace` or any
+  `WorkspaceMember` row — the workspace, its roster, and its role
+  assignments are preserved exactly as-is so restoration is a pure
+  status flip. Ownership (`Company.createdByUserId`) is never
+  transferred to the admin or the platform.
+- **User deactivation** (`POST /admin/users/:id/deactivate`, gated by
+  `admin.users.deactivate`) sets `User.accountStatus = DEACTIVATED` and
+  immediately revokes that user's sessions. It has no effect on any
+  company the user happens to have registered — a company continues to
+  exist and continues to be usable by its other active members even if
+  its registering owner's personal account is later deactivated for an
+  unrelated reason.
+- Deactivating a company therefore never locks out its owner's login,
+  and deactivating a user therefore never changes a company's status.
+  An admin who wants both must call both endpoints explicitly. See
+  `apps/api/test/admin-company-moderation.e2e-spec.ts` for the automated
+  proof that a company's owner-user and unrelated users' personal
+  workspaces are untouched by company deactivation.
+- Restoration for a company works through the same `POST
+  /admin/companies/:id/restore` endpoint used for un-suspending — it
+  accepts either prior state (`SUSPENDED` or `DEACTIVATED`) and flips
+  back to `ACTIVE`.
+
+## Future content moderation lifecycle (foundation only — Milestone 5)
+
+The `admin.content.view` / `admin.content.unpublish` /
+`admin.content.archive` / `admin.content.restore` permission keys exist
+in the catalog today as a foundation; **no content/property model exists
+yet, and this milestone does not implement any of the transitions
+below** — they are documented now so Milestone 5's moderation feature is
+built against an already-agreed shape rather than an invented one at
+that time.
+
+Normal moderation on any future publicly-visible listing must be a
+reversible state change, resolved server-side, never a hard delete:
+
+```
+PUBLISHED ──(admin.content.unpublish)──▶ ADMIN_UNPUBLISHED
+                                              │
+                        (admin.content.restore)   (admin.content.archive)
+                                              │              │
+                                              ▼              ▼
+                                          RESTORED       ARCHIVED
+                                     (back to its prior            │
+                                      business state)   (admin.content.restore)
+                                                                    │
+                                                                    ▼
+                                                                RESTORED
+```
+
+In prose: `PUBLISHED → ADMIN_UNPUBLISHED → RESTORED`, or
+`PUBLISHED → ADMIN_UNPUBLISHED → ARCHIVED → RESTORED`. Whichever of
+those transitions Milestone 5 implements, it must preserve — exactly as
+the `AdminUsersService`/`AdminCompaniesService` pattern already does for
+users/companies:
+
+- the listing's ownership (which workspace it belongs to — never
+  transferred to the admin or platform),
+- its full audit history (append-only, actions never overwritten),
+- the moderation reason for each unpublish/archive/restore action,
+- timestamps for each transition,
+- every business relationship the listing participates in (CRM links,
+  collaboration grants, etc. — nothing cascades or gets orphaned by a
+  moderation action).
+
+## Moderation reason: two-tier design (Milestone 2, intentional)
+
+Reason is handled differently at the two moderation levels, on purpose:
+
+- **Platform-admin moderation** (`ModerationActionDto` — user
+  suspend/deactivate, company deactivate) **requires** a reason
+  (`@IsString`, `@MinLength(3)`) — a platform admin acting on any
+  account is a higher-stakes, formally-auditable action, and the reason
+  is what makes it reviewable after the fact.
+- **Workspace-level member moderation** (`ModerationReasonDto` —
+  suspending/removing a member from one's own workspace)
+  **leaves reason optional** — an owner suspending their own employee is
+  a routine, lower-stakes team-management action, and the workspace's
+  own audit trail (who did it, to whom, when) is already captured
+  regardless of whether a reason string was supplied. Company restore
+  (`RestoreActionDto`) is optional at both levels, matching user restore.
+
+This distinction is deliberate, not an oversight — do not make
+workspace-level reasons required unless a specific product requirement
+calls for it.
 
 ## Owner & Super Admin lockout protection
 
@@ -249,8 +343,10 @@ Implemented: workspace isolation and switching, membership lifecycle
 (invite → accept → suspend/remove/role-change), the full permission
 catalog and system role seed above, the workspace/platform scope
 separation and its structural enforcement, custom per-workspace roles,
-the admin user directory and moderation endpoints, platform role
-grant/revoke, and both lockout protections. Not yet built: property,
+the admin user directory and moderation endpoints, company moderation
+(suspend/deactivate/restore), platform role grant/revoke, both lockout
+protections, and pagination on `GET /workspaces/:id/members`. Not yet
+built: property,
 CRM, matching, messaging, viewings, collaboration, commission,
 subscriptions, payments, and a full admin frontend — those remain future
 milestones, and this document continues to define their target

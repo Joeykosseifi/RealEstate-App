@@ -8,9 +8,11 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import type {
+  Paginated,
   WorkspaceDetail,
   WorkspaceMemberSummary,
   WorkspaceRoleSummary,
@@ -32,6 +34,7 @@ import { ModerationReasonDto } from './dto/moderation-reason.dto';
 import { ChangeMemberRoleDto } from './dto/change-member-role.dto';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
+import { ListWorkspaceMembersQueryDto } from './dto/list-workspace-members-query.dto';
 
 @Controller('workspaces')
 export class WorkspacesController {
@@ -71,8 +74,9 @@ export class WorkspacesController {
   @RequireWorkspacePermission(PERMISSIONS.TEAM_VIEW.key)
   async members(
     @CurrentWorkspace() workspaceContext: WorkspaceContext,
-  ): Promise<WorkspaceMemberSummary[]> {
-    return this.directory.listMembers(workspaceContext.workspaceId);
+    @Query() query: ListWorkspaceMembersQueryDto,
+  ): Promise<Paginated<WorkspaceMemberSummary>> {
+    return this.directory.listMembers(workspaceContext.workspaceId, query);
   }
 
   @Post(':id/invitations')
