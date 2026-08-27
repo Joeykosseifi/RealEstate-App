@@ -3,6 +3,8 @@ import { baseEnvSchema, validateEnv } from '@real-estate/config';
 
 export const apiEnvSchema = baseEnvSchema.extend({
   API_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  /** Used to build absolute signed-media-access URLs — see StorageService. */
+  API_URL: z.string().url().default('http://localhost:3000'),
   CORS_ORIGINS: z
     .string()
     .default('')
@@ -29,6 +31,19 @@ export const apiEnvSchema = baseEnvSchema.extend({
 
   EMAIL_PROVIDER: z.enum(['console']).default('console'),
   SMS_PROVIDER: z.enum(['console']).default('console'),
+
+  /// Only 'local' exists today (a real filesystem, private by default —
+  /// see StorageModule). Swapping to an S3-compatible provider later is
+  /// meant to be a new value here plus a new StorageService
+  /// implementation, with no change to any caller.
+  STORAGE_PROVIDER: z.enum(['local']).default('local'),
+  STORAGE_LOCAL_DIR: z.string().default('.data/property-media'),
+  STORAGE_SIGNED_URL_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(300),
+  STORAGE_SIGNING_SECRET: z.string().min(16),
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;

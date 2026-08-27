@@ -84,7 +84,7 @@ Authorization (Milestone 2+) remains a forward statement.
   password reset, but isn't exposed as its own endpoint yet — deferred
   per the instruction to only build what naturally fits Milestone 1).
 
-## Authorization (Milestone 2 — implemented for workspaces/admin; entity-level ownership below is still a forward statement for Milestone 3+)
+## Authorization (Milestone 2 — workspaces/admin; Milestone 3 — first entity-level ownership, Property)
 
 - Enforced server-side only. The frontend is never trusted for
   ownership, role, workspace, or permission values.
@@ -106,12 +106,57 @@ Authorization (Milestone 2+) remains a forward statement.
   `@RequirePlatformPermission(key)` checks the caller's platform-role-
   derived permissions, independent of workspace membership. Controllers
   stay thin — no inline permission checks.
-- Full professional-data ownership/collaboration resolution (property,
-  CRM, etc.) is Milestone 3+; the permission keys exist in the catalog
-  today as a foundation but are not yet enforced by any endpoint.
+- Full professional-data ownership/collaboration resolution across
+  entity types is still growing milestone by milestone; Property
+  (Milestone 3) is the first one built out. CRM/matching/messaging/etc.
+  remain Milestone 4+; their permission keys exist in the catalog today
+  as a foundation but are not yet enforced by any endpoint.
 
-## Reversible moderation (Milestone 2)
+## Property data isolation and sensitive-field enforcement (Milestone 3)
 
+- Every property query is scoped by `workspaceId` at the database level
+  (`WHERE id = :propertyId AND workspaceId = :workspaceId`) — a property
+  belonging to a different workspace is a `404`, identical to "doesn't
+  exist," so a guessed/leaked property UUID can never be used to probe
+  whether it belongs to someone else. See
+  `apps/api/test/property-security.e2e-spec.ts`.
+- `property.view` is the baseline read permission and structurally
+  implies nothing else: owner contact info requires
+  `property.view_owner`, private/internal notes require
+  `property.view_private_notes`, commission figures additionally require
+  `property.view_commission` on top of that, and exact coordinates
+  require `property.view_exact_location`. Each of these is checked
+  independently in `property.mapper.ts` — a caller missing one still
+  gets the rest of the property record, just with that section (not a
+  masked/null placeholder — the key itself) omitted. See
+  `apps/api/test/property-sensitive-fields.e2e-spec.ts`.
+- The same permission required to READ owner info / private notes /
+  commission is also required to WRITE it — a user who can't see owner
+  data can't blindly overwrite it either
+  (`PropertiesService.assertCanWriteSensitiveSections`). Location is the
+  one exception: every property needs a location the moment it's
+  created, so writing it only needs the baseline `property.create`/
+  `property.edit`; only reading the exact coordinates back is gated.
+- `workspaceId` and `createdByUserId` are structurally unreachable from
+  `UpdatePropertyDto` — there is no request shape that can move a
+  property to a different workspace or forge its authorship through an
+  update.
+- Property media is served exclusively through short-lived signed URLs
+  (never a permanent public path) and storage keys are always resolved
+  from the database, never accepted from a client — see
+  docs/DATABASE.md "Property media storage."
+
+## Reversible moderation (Milestone 2 & 3)
+
+- **Property archiving (Milestone 3) follows the same pattern.**
+  `POST .../properties/:id/archive` sets `propertyStatus = ARCHIVED` and
+  stamps `archivedAt`/`archivedByUserId` — it never deletes the
+  `Property` row or any related `PropertyLocation`/`PropertyMedia`/
+  `PropertyOwner`/`PropertyPrivateDetails` record. `POST
+  .../properties/:id/restore` is always available from `ARCHIVED`,
+  landing on `OFF_MARKET` (not the prior status) so an agent
+  consciously re-lists rather than a property silently reappearing as
+  `AVAILABLE`.
 - User suspension/deactivation/restoration, company
   suspension/deactivation/restoration, and workspace member
   suspension/removal are **never a hard delete.** Every action records
@@ -203,7 +248,14 @@ Authorization (Milestone 2+) remains a forward statement.
   `admin.user_suspended`, `admin.user_deactivated`,
   `admin.user_restored`, `admin.platform_role_assigned`,
   `admin.platform_role_removed`, `admin.company_suspended`,
-  `admin.company_deactivated`, `admin.company_restored`.
+  `admin.company_deactivated`, `admin.company_restored`. Milestone 3
+  adds: `property.created`, `property.updated`, `property.status_changed`,
+  `property.archived`, `property.restored`, `property.media_added`,
+  `property.media_removed`, `property.media_reordered`, and the
+  sensitive-access trail `property.owner_accessed`,
+  `property.private_notes_accessed`, `property.exact_location_accessed`
+  (logged only when that section was actually present AND actually
+  included in the response — i.e. the caller held the permission).
 - Never logged: passwords, access tokens, refresh tokens, OTP codes,
   reset tokens, full payment credentials. `AuditLog.metadata` is only
   ever given non-secret structured context (e.g. `{ accountType }`,

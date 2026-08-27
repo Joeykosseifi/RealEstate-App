@@ -6,13 +6,76 @@
   migration under `prisma/migrations/`. Never mutate the database outside
   of a migration.
 
-## Current state (Milestone 2)
+## Current state (Milestone 3)
 
 Milestone 0 shipped only the `datasource`/`generator` blocks. Milestone 1
 added authentication, users, verification, sessions, and the minimum
 workspace/company/role foundation needed for automatic workspace creation
-on account activation. Milestone 2 builds the full workspace/permission
-engine and platform admin authorization on top of that foundation.
+on account activation. Milestone 2 built the full workspace/permission
+engine and platform admin authorization. Milestone 3 (this revision)
+adds the professional private property database — `Property` and its
+related models.
+
+### Property models (Milestone 3)
+
+| Model | Purpose |
+|---|---|
+| `Property` | The core record. `workspaceId` (business owner, immutable after creation) and `createdByUserId` (who entered it) are separate concepts. `propertyStatus` is business status only (`AVAILABLE`/`RESERVED`/`SOLD`/`RENTED`/`OFF_MARKET`/`ARCHIVED`) — publication status doesn't exist yet (Milestone 5). `price`/`areaSqm` are `Decimal`, not `Float`, to avoid rounding drift. |
+| `PropertyLocation` | One-to-one. The permanent Google Maps pin (`latitude`/`longitude` as `Decimal(9,6)`, `googlePlaceId` as a convenience reference only), plus `locationSource` (how it was captured) and the future-facing `locationVisibility` (not enforced by any endpoint yet). |
+| `PropertyFeature` | A normalized `(propertyId, featureKey, value)` row per amenity — not one boolean column per feature. `featureKey` is validated at the API layer against `apps/api/src/properties/property-features.catalog.ts`, the same "single source of truth catalog" pattern as `permissions.catalog.ts`, so adding a new amenity is a one-line catalog change, never a migration. |
+| `PropertyMedia` | Object-storage reference (`storageKey`, never a public URL) plus metadata. Exactly one row per property may have `isPrimary = true`, enforced by a hand-added partial unique index (see below), not just application logic. |
+| `PropertyOwner` | Private owner/contact data. A property may have more than one (co-owners). Requires `property.view_owner` to read or write. |
+| `PropertyPrivateDetails` | One-to-one. Internal notes + commission notes + acquisition/reference metadata. Requires `property.view_private_notes` to read or write; `commissionNotes` additionally requires `property.view_commission`. |
+
+### Design decisions worth knowing (Milestone 3)
+
+- **Main-photo partial unique index.** Mirrors Milestone 2's
+  system-role-key pattern: `CREATE UNIQUE INDEX
+  "property_media_one_primary_per_property" ON "property_media"
+  ("propertyId") WHERE "isPrimary" = true` guarantees at the database
+  level that a property can never end up with two primary images, even
+  under a bug or a race — a plain `(propertyId, isPrimary)` unique index
+  wouldn't work, since Postgres allows unlimited `isPrimary = false` rows
+  to share a `propertyId`.
+- **Property feature storage.** A normalized key/value join table, not a
+  DB enum or a foreign-key catalog table, was chosen so a new amenity
+  never needs a migration — the tradeoff is that uniqueness/validity of
+  `featureKey` is enforced by the API layer (against the code catalog),
+  not by the database schema itself.
+- **`Decimal`, not `Float`, for money and area.** `price`/`areaSqm`/
+  `latitude`/`longitude` are all Prisma `Decimal` columns. API responses
+  convert them to plain JS `number` (see `property.mapper.ts`) — safe
+  for realistic property prices/areas/coordinates, and avoids
+  Decimal-vs-JSON serialization friction in every consumer.
+- **Property concurrency.** Deliberately plain last-write-wins for
+  ordinary field edits (no version column, no row lock) — a rare,
+  low-stakes race, unlike Milestone 2's owner/SUPER_ADMIN-count
+  invariants which use `SELECT ... FOR UPDATE` because they genuinely
+  cannot tolerate a race. The one thing that IS locked: concurrent media
+  uploads to the same property lock the parent `Property` row before
+  deciding "is this the first image" (a `PropertyMedia` row can't be
+  locked for this, since for the very first upload none exists yet to
+  lock) — found by a concurrency test that reproduced the primary-image
+  unique-index violation under real parallel requests. Concurrent media
+  reorders lock the affected rows in one canonical (sorted-by-id) order
+  before writing, for the same reason two Postgres transactions
+  updating the same rows in opposite orders can deadlock (error 40P01,
+  also found by a concurrency test) — see
+  `apps/api/test/property-concurrency-audit.e2e-spec.ts`.
+- **Property media storage.** `apps/api/src/storage/` defines a
+  `StorageService` interface (`putObject`/`getSignedAccessUrl`/
+  `deleteObject`) with one implementation today, `LocalDiskStorageService`
+  — a real filesystem directory (`STORAGE_LOCAL_DIR`, gitignored, default
+  `.data/property-media`), not a placeholder, since no S3-compatible
+  credentials are configured in this environment. Files are never served
+  from a public path: `getSignedAccessUrl` returns an HMAC-signed,
+  time-limited URL (`STORAGE_SIGNED_URL_TTL_SECONDS`, default 5 minutes)
+  to `GET /storage/access`, which verifies the signature before
+  streaming the file. A real S3-compatible provider is meant to be a new
+  class behind the same interface — no caller changes. Storage keys are
+  always server-generated and resolved from the `PropertyMedia` row
+  before any read/delete — a client can never name a storage key
+  directly.
 
 ### Models
 
@@ -89,7 +152,7 @@ exercise this directly.
 |---|---|
 | 1 | ✅ `User`, `UserSession`, `EmailVerification`, `PhoneVerification`, `PasswordReset`, `Company`, `Workspace`, `WorkspaceMember`, `Role`, `Permission`, `RolePermission`, `AuditLog` |
 | 2 | ✅ `UserPlatformRole`; `Role`/`Permission` scope split; full workspace management + admin authorization API |
-| 3 | `Property`, property media, owner info, private notes, location |
+| 3 | ✅ `Property`, `PropertyLocation`, `PropertyFeature`, `PropertyMedia`, `PropertyOwner`, `PropertyPrivateDetails` |
 | 4 | CRM `Client`, `ClientRequirement`, match results, `Presentation` |
 | 5 | Publication review/moderation records |
 | 6 | Client favorites, public marketplace read models |
@@ -106,9 +169,10 @@ exercise this directly.
 - Every table gets `createdAt`; mutable tables also get `updatedAt`
   (`AuditLog` is append-only, so it has no `updatedAt`).
 - Soft-delete vs. hard-delete is decided per-entity based on the audit and
-  historical-data requirements in the product spec (e.g. sold properties
-  must remain queryable as history) — not yet relevant to any Milestone 1
-  model.
+  historical-data requirements in the product spec. `Property` follows
+  this now: a sold or retired property is archived (`propertyStatus =
+  ARCHIVED`, `archivedAt`/`archivedByUserId` stamped), never deleted —
+  see docs/PERMISSIONS.md "Archive, not delete."
 - Foreign keys are always indexed.
 - No ORM entity is ever returned directly from an API response — every
   endpoint maps to an explicit DTO (see `docs/API.md`).
@@ -121,9 +185,14 @@ exercise this directly.
 cp .env.example .env
 npm run docker:up            # starts Postgres + Redis
 npm run prisma:generate
-npm run prisma:migrate       # applies both migrations (Milestone 1 + Milestone 2)
+npm run prisma:migrate       # applies all migrations (Milestones 1-3)
 npm run prisma:seed          # seeds the permission catalog + system roles (idempotent)
 ```
+
+Property media is stored on the local filesystem in development (see
+"Property media storage" above) — no extra setup needed, but confirm
+`STORAGE_LOCAL_DIR`/`STORAGE_SIGNING_SECRET` are set in `.env` (copied
+from `.env.example`).
 
 To grant the first `SUPER_ADMIN` (no HTTP endpoint does this — see
 `docs/PERMISSIONS.md` "Super Admin bootstrap"):

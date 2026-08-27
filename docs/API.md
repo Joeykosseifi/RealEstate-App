@@ -154,6 +154,76 @@ entirely independent of any workspace membership.
 Moderation is always reversible — suspend/deactivate/restore never
 delete a row; see `docs/SECURITY.md` "Reversible moderation."
 
+## Property endpoints (Milestone 3)
+
+All under `/api/v1`, all workspace-rooted (`:id` is the workspace id,
+resolved and authorized exactly like the workspace endpoints above) and
+require `Authorization: Bearer <token>`. A property belonging to a
+different workspace than `:id` is a `404`, not a `403` — see
+docs/SECURITY.md "Property data isolation."
+
+| Method & path | Permission | Notes |
+|---|---|---|
+| `POST workspaces/:id/properties` | `property.create` | Single transaction: Property + optional `location`/`featureKeys`/`owners`/`privateDetails` all commit together or not at all. Submitting `owners`/`privateDetails` requires the matching view permission too — see docs/PERMISSIONS.md "Sensitive property fields." `201`. |
+| `GET workspaces/:id/properties` | `property.view` | Paginated, filterable — see "Property search" below. Excludes `ARCHIVED` unless `propertyStatus=ARCHIVED` or `includeArchived=true` is passed. |
+| `GET workspaces/:id/properties/:propertyId` | `property.view` | `location`/`owners`/`privateDetails` are present as keys ONLY when the caller holds the matching permission — omitted, never `null`. Logs a sensitive-access audit event per section actually returned. |
+| `PATCH workspaces/:id/properties/:propertyId` | `property.edit` | No `workspaceId`/`createdByUserId`/`propertyStatus` field exists on this DTO — unknown fields are rejected outright (`whitelist`/`forbidNonWhitelisted`). Whole-section replace semantics for `location`/`owners`/`privateDetails`/`featureKeys` when included. `409` if the property is `ARCHIVED` (restore first). |
+| `PATCH workspaces/:id/properties/:propertyId/location` | `property.edit` | Focused location-only update — same effect as including `location` in the PATCH above. |
+| `POST workspaces/:id/properties/:propertyId/status` | `property.edit` | `{ propertyStatus }`, one of `AVAILABLE`/`RESERVED`/`SOLD`/`RENTED`/`OFF_MARKET` (never `ARCHIVED` — `400`). `409` on a disallowed transition or if the property is archived — see docs/PERMISSIONS.md "Property status model." `204`. |
+| `POST workspaces/:id/properties/:propertyId/archive` | `property.archive` | Reversible. `409` if already archived. `204`. |
+| `POST workspaces/:id/properties/:propertyId/restore` | `property.archive` | `409` unless the property is currently `ARCHIVED`. Always lands on `OFF_MARKET`. `204`. |
+
+### Property search (Milestone 3)
+
+`GET workspaces/:id/properties` query parameters: `page`, `pageSize`
+(default 20, max 100), `search` (title/city/area/address,
+case-insensitive `contains`), `propertyType`, `listingPurpose`,
+`propertyStatus`, `priceMin`/`priceMax`, `bedroomsMin`, `bathroomsMin`,
+`areaMin`/`areaMax`, `city`, `area`, `features` (one or more feature
+keys — `?features=pool&features=garden`), `createdByUserId`,
+`includeArchived`, `sortOrder`. All filters are parameterized Prisma
+queries (`contains`/`gte`/`lte`/relation `some`) — no raw SQL. Simple
+indexed filtering, not Postgres full-text/trigram search — acceptable
+for this milestone, see docs/DATABASE.md.
+
+### Property media endpoints (Milestone 3)
+
+All nested under `workspaces/:id/properties/:propertyId/media`, all
+requiring `property.edit` (upload/reorder/delete) or `property.view`
+(access-url) — media is part of editing a property, not a separately-
+permissioned capability. See docs/DATABASE.md "Property media storage."
+
+| Method & path | Permission | Notes |
+|---|---|---|
+| `POST .../media` | `property.edit` | `multipart/form-data`: `file` + `mediaType` (`IMAGE`/`VIDEO`/`DOCUMENT`) + optional `isPrimary`/`sortOrder`. First uploaded image becomes primary automatically unless `isPrimary` is explicit; setting a new primary unsets the old one (exactly one `isPrimary=true` per property, enforced by a DB partial unique index). Max 25MB. `201`. |
+| `GET .../media/:mediaId/access-url` | `property.view` | Returns `{ url }` — a signed, time-limited URL (default 5 minutes). Never a permanent public path. |
+| `PATCH .../media/reorder` | `property.edit` | `{ mediaIds: [...] }` — must list every media item belonging to the property, exactly once. `400` otherwise. |
+| `DELETE .../media/:mediaId` | `property.edit` | Storage key is always resolved from the database, never accepted from the client. Deletes the object and the row; `204`. |
+| `GET storage/access?key=&exp=&sig=` | — (signature-verified, not Bearer-authenticated) | The actual signed download endpoint a `access-url` response points to — mirrors how a real S3 presigned URL works. `401` on a missing/invalid/expired signature. |
+
+### Mobile setup (Milestone 3)
+
+`apps/mobile` reads `EXPO_PUBLIC_API_URL` (defaults to
+`http://localhost:3000`) — set it to a URL your device/simulator can
+actually reach (a plain `localhost` won't resolve from a physical
+device or most Android emulators; use your machine's LAN IP or a tunnel).
+
+**Google Maps setup (not configured in this environment):** the
+location picker currently uses manual lat/lng entry plus an explicit
+"Use current location" button (`apps/mobile/src/location/useCurrentLocation.ts`).
+To add the full interactive map/search experience described in the
+product spec:
+
+1. Install `react-native-maps` and, for search/autocomplete, a Places
+   client library.
+2. Obtain a Google Maps Platform API key (Maps SDK + Places API
+   enabled) and set `GOOGLE_MAPS_API_KEY` (native config) /
+   `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` (client-side calls) in `.env`.
+3. Build a `<MapLocationPicker>` component behind the same interface
+   `useCurrentLocation` already establishes, and swap it into
+   `AddPropertyScreen`'s Location section — no other screen needs to
+   change, since they only ever receive `{ latitude, longitude, ... }`.
+
 ## N+1 prevention
 
 Prisma queries for list endpoints must use `include`/`select` to fetch

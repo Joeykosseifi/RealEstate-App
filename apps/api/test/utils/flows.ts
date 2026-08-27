@@ -187,3 +187,37 @@ export async function grantPlatformRole(
 export function authHeader(accessToken: string): [string, string] {
   return ['Authorization', `Bearer ${accessToken}`];
 }
+
+/** Minimal valid property payload for tests — override any field. */
+export function minimalPropertyPayload(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    propertyType: 'APARTMENT',
+    listingPurpose: 'SALE',
+    title: 'Test Property',
+    price: 100000,
+    currency: 'USD',
+    ...overrides,
+  };
+}
+
+export interface CreatedProperty {
+  id: string;
+  [key: string]: unknown;
+}
+
+/** Creates a property via the real HTTP API and returns the created professional-detail response body. */
+export async function createProperty(
+  testApp: TestApp,
+  workspaceId: string,
+  accessToken: string,
+  overrides: Record<string, unknown> = {},
+): Promise<CreatedProperty> {
+  const response = await request(testApp.app.getHttpServer())
+    .post(`/api/v1/workspaces/${workspaceId}/properties`)
+    .set(...authHeader(accessToken))
+    .send(minimalPropertyPayload(overrides))
+    .expect(201);
+  return response.body as CreatedProperty;
+}

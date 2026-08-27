@@ -19,6 +19,10 @@ out/
 coverage/
 *.tsbuildinfo
 
+# Local object storage (dev/test property media — see docs/DATABASE.md
+# "Property media storage")
+.data/
+
 # Prisma
 prisma/generated/
 

@@ -4,16 +4,20 @@
 // Milestone 1: authentication, users, verification, sessions, and the
 // minimum workspace/company/role foundation needed for automatic
 // personal (agent) and company workspace creation on account activation.
-// Milestone 2 (this revision): the full authorization foundation —
-// workspace/platform role scoping, the permission catalog, platform
-// (admin) roles, and the moderation fields user suspension/
-// deactivation/restoration need. See docs/DATABASE.md for the full
-// model-introduction schedule and the rationale behind specific design
-// choices (e.g. `User.pendingCompanyProfile`, the workspace type CHECK
-// constraint, the Role scope/uniqueness design below).
+// Milestone 2: the full authorization foundation — workspace/platform
+// role scoping, the permission catalog, platform (admin) roles, and the
+// moderation fields user suspension/deactivation/restoration need.
+// Milestone 3 (this revision): the professional private property
+// database — Property and its related models (location, features,
+// media, owner contacts, private details). See docs/DATABASE.md for the
+// full model-introduction schedule and the rationale behind specific
+// design choices (e.g. `User.pendingCompanyProfile`, the workspace type
+// CHECK constraint, the Role scope/uniqueness design, and the
+// Milestone 3 property design decisions below).
 //
-// Do not add property/CRM/collaboration/subscription models yet — those
-// belong to later milestones.
+// Do not add CRM/matching/collaboration/publication/subscription models
+// yet — those belong to later milestones. Publication status is
+// deliberately NOT part of Property yet (Milestone 5).
 
 generator client {
   provider = "prisma-client-js"
@@ -145,6 +149,7 @@ model User {
   companiesCreated     Company[]           @relation("CompanyCreatedBy")
   auditLogs            AuditLog[]          @relation("AuditActor")
   platformRoles        UserPlatformRole[]
+  createdProperties    Property[]          @relation("PropertyCreatedBy")
 
   @@map("users")
 }
@@ -281,6 +286,7 @@ model Workspace {
 
   members     WorkspaceMember[]
   customRoles Role[]            @relation("WorkspaceCustomRoles")
+  properties  Property[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -438,4 +444,253 @@ model AuditLog {
   @@index([actorUserId])
   @@index([action])
   @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Milestone 3 — Property database
+//
+// A Property belongs to exactly one workspace (its business owner) —
+// `workspaceId` is never changeable via update, only set at creation.
+// `createdByUserId` is a separate concept: the person who entered the
+// record, which may differ from the workspace (e.g. a company employee
+// creating a property that belongs to the company workspace, not their
+// own personal one). See docs/PERMISSIONS.md "Property ownership vs.
+// authorship."
+//
+// Business status (this milestone) and publication status (Milestone 5,
+// not modeled yet) are deliberately separate concerns — see
+// docs/PERMISSIONS.md "Property status model."
+// ---------------------------------------------------------------------------
+
+enum PropertyType {
+  APARTMENT
+  VILLA
+  HOUSE
+  LAND
+  OFFICE
+  SHOP
+  COMMERCIAL
+  WAREHOUSE
+  BUILDING
+  CHALET
+  OTHER
+}
+
+enum ListingPurpose {
+  SALE
+  RENT
+}
+
+/// Business status only — never conflated with publication status
+/// (Milestone 5). ARCHIVED is reached via the archive endpoint, not a
+/// direct status-change call — see PropertiesService.
+enum PropertyBusinessStatus {
+  AVAILABLE
+  RESERVED
+  SOLD
+  RENTED
+  OFF_MARKET
+  ARCHIVED
+}
+
+/// How the saved lat/lng was obtained — captured for provenance, not
+/// authorization. The database coordinates are the source of truth
+/// regardless of source; googlePlaceId is a convenience reference, never
+/// relied on exclusively (see docs/PERMISSIONS.md "Google Maps
+/// strategy").
+enum PropertyLocationSource {
+  GOOGLE_SEARCH
+  MAP_PIN
+  CURRENT_LOCATION
+  MANUAL
+}
+
+/// Independent of workspace-level permissions — this is the FUTURE
+/// public/marketplace visibility rule (consumed starting Milestone 5/6).
+/// Milestone 3 only enforces the professional-side permission
+/// (`property.view_exact_location`) for exposing coordinates within a
+/// workspace; it does not yet build any public/client-facing endpoint
+/// that reads this field.
+enum PropertyLocationVisibility {
+  PRIVATE
+  WORKSPACE
+  PUBLIC_APPROXIMATE
+  PUBLIC_EXACT
+}
+
+enum PropertyMediaType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+}
+
+model Property {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdByUserId String @db.Uuid
+  createdBy       User   @relation("PropertyCreatedBy", fields: [createdByUserId], references: [id])
+
+  propertyType   PropertyType
+  listingPurpose ListingPurpose
+  title          String
+  description    String?
+
+  /// Stored as Decimal (never float) to avoid rounding drift; mapped to
+  /// a plain `number` in API responses (see property.mapper.ts) — safely
+  /// within JS's safe-integer range for realistic property prices.
+  price    Decimal @db.Decimal(14, 2)
+  currency String  @db.Char(3)
+
+  bedrooms    Int?
+  bathrooms   Int?
+  areaSqm     Decimal? @db.Decimal(10, 2)
+  floor       Int?
+  totalFloors Int?
+  yearBuilt   Int?
+
+  propertyStatus PropertyBusinessStatus @default(AVAILABLE)
+
+  /// Plain scalar actor reference (see User's moderation fields for the
+  /// established rationale) — full detail lives in AuditLog.
+  archivedAt       DateTime?
+  archivedByUserId String?   @db.Uuid
+
+  location       PropertyLocation?
+  features       PropertyFeature[]
+  media          PropertyMedia[]
+  owners         PropertyOwner[]
+  privateDetails PropertyPrivateDetails?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([workspaceId, propertyStatus])
+  @@index([workspaceId, propertyType])
+  @@index([workspaceId, listingPurpose])
+  @@index([workspaceId, price])
+  @@index([createdByUserId])
+  @@map("properties")
+}
+
+/// One-to-one with Property. The exact coordinates are the permanent
+/// source of truth once saved — see docs/PERMISSIONS.md "Google Maps
+/// strategy." `Decimal(9,6)` comfortably covers the valid ranges
+/// (latitude -90..90, longitude -180..180) at ~0.11m precision.
+model PropertyLocation {
+  id         String   @id @default(uuid()) @db.Uuid
+  propertyId String   @unique @db.Uuid
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  country String?
+  region  String?
+  city    String?
+  area    String?
+  address String?
+
+  latitude      Decimal @db.Decimal(9, 6)
+  longitude     Decimal @db.Decimal(9, 6)
+  googlePlaceId String?
+
+  locationSource     PropertyLocationSource     @default(MANUAL)
+  locationVisibility PropertyLocationVisibility @default(PRIVATE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([city])
+  @@index([area])
+  @@index([country, city, area])
+  @@map("property_locations")
+}
+
+/// Flexible feature/amenity storage — a normalized key + boolean value,
+/// not one column per amenity, so adding a new feature never requires a
+/// migration. `featureKey` is validated at the API layer against
+/// `apps/api/src/properties/property-features.catalog.ts` (the same
+/// "single source of truth catalog" pattern as permissions), not by a
+/// DB-level enum/foreign key — see docs/DATABASE.md "Property feature
+/// storage."
+model PropertyFeature {
+  id         String   @id @default(uuid()) @db.Uuid
+  propertyId String   @db.Uuid
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  featureKey String
+  value      Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@unique([propertyId, featureKey])
+  @@map("property_features")
+}
+
+/// `storageKey` is an opaque object-storage reference, never a public
+/// URL — see StorageService. Exactly one row per property may have
+/// `isPrimary = true`, enforced by a hand-added partial unique index in
+/// this milestone's migration (see docs/DATABASE.md "Main photo rule").
+model PropertyMedia {
+  id         String   @id @default(uuid()) @db.Uuid
+  propertyId String   @db.Uuid
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  mediaType        PropertyMediaType
+  storageKey       String
+  originalFileName String
+  mimeType         String
+  fileSize         Int
+  sortOrder        Int               @default(0)
+  isPrimary        Boolean           @default(false)
+
+  uploadedByUserId String @db.Uuid
+
+  createdAt DateTime @default(now())
+
+  @@index([propertyId, sortOrder])
+  @@map("property_media")
+}
+
+/// Private professional data — never included in any public DTO. Access
+/// requires `property.view_owner`, independent of `property.view`. A
+/// property may have more than one owner/contact row (co-owners, an
+/// agent-side contact, etc.).
+model PropertyOwner {
+  id         String   @id @default(uuid()) @db.Uuid
+  propertyId String   @db.Uuid
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  fullName      String
+  phone         String?
+  email         String?
+  whatsappPhone String?
+  notes         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([propertyId])
+  @@map("property_owners")
+}
+
+/// One-to-one with Property. `internalNotes`/`acquisitionSource`/
+/// `internalReference`/`privateStatusNotes` require
+/// `property.view_private_notes`; `commissionNotes` additionally
+/// requires `property.view_commission` on top of that — see
+/// docs/PERMISSIONS.md "Sensitive property fields."
+model PropertyPrivateDetails {
+  propertyId String   @id @db.Uuid
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  internalNotes      String?
+  commissionNotes    String?
+  acquisitionSource  String?
+  internalReference  String?
+  privateStatusNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("property_private_details")
 }

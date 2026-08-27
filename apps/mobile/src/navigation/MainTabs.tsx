@@ -1,0 +1,33 @@
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { PlaceholderScreen } from '../screens/PlaceholderScreen';
+import { MoreScreen } from '../screens/MoreScreen';
+import { PropertiesStack } from './PropertiesStack';
+
+export type MainTabParamList = {
+  Home: undefined;
+  Properties: undefined;
+  Clients: undefined;
+  Inbox: undefined;
+  More: undefined;
+};
+
+const Tab = createBottomTabNavigator<MainTabParamList>();
+
+/**
+ * The five-tab shell described in the Milestone 3 spec. Only Properties
+ * has real business functionality this milestone — Home/Clients/Inbox
+ * are deliberate placeholders (see docs/PRODUCT.md), not dead buttons:
+ * they render a real screen explaining what's coming, rather than doing
+ * nothing when tapped.
+ */
+export function MainTabs(): React.JSX.Element {
+  return (
+    <Tab.Navigator screenOptions={{ headerShown: false }}>
+      <Tab.Screen name="Home" children={() => <PlaceholderScreen title="Home" />} />
+      <Tab.Screen name="Properties" component={PropertiesStack} options={{ headerShown: false }} />
+      <Tab.Screen name="Clients" children={() => <PlaceholderScreen title="Clients" />} />
+      <Tab.Screen name="Inbox" children={() => <PlaceholderScreen title="Inbox" />} />
+      <Tab.Screen name="More" component={MoreScreen} options={{ headerShown: true }} />
+    </Tab.Navigator>
+  );
+}

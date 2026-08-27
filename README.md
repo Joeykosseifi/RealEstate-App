@@ -110,7 +110,7 @@ linted, security-reviewed, and documented before the next begins.
 | 0 | Repository foundation (this repo, DB, Prisma, Redis, tooling) | ✅ |
 | 1 | Auth, users, verification, sessions, personal workspace creation | ✅ |
 | 2 | Workspaces, memberships, roles, permissions, authorization | ✅ |
-| 3 | Agent property database (location, media, owner info, search) | ⬜ |
+| 3 | Agent property database (location, media, owner info, search) | ✅ |
 | 4 | CRM, requirements, matching, presentations/PDFs | ⬜ |
 | 5 | Publication workflow & admin moderation | ⬜ |
 | 6 | Client marketplace, search, favorites, public profiles | ⬜ |

@@ -25,6 +25,26 @@ milestone that touches professional data is built against the same rules.
    - Ending a collaboration revokes future access but preserves
      historical/audit records and existing transaction records.
 
+### Property ownership vs. authorship (Milestone 3)
+
+`Property` has two distinct id fields, and they answer different
+questions:
+
+- **`workspaceId`** — the business owner. Set once at creation, never
+  changeable afterward (`UpdatePropertyDto` has no `workspaceId` field
+  at all — there is no request shape that could move a property to a
+  different workspace).
+- **`createdByUserId`** — who actually entered the record. Server-derived
+  from the authenticated caller, never client-supplied.
+
+Example: John, an employee of Confidence Real Estate, creates a
+property while acting in Confidence's workspace.
+`workspaceId = Confidence's workspace`, `createdByUserId = John`. The
+property belongs to the company, not to John's own personal workspace
+— removing John from Confidence later has no effect on the property.
+This is the same design already used for `WorkspaceMember.invitedByUserId`
+and friends in Milestone 2, applied to business data for the first time.
+
 3. **Permissions** — granular, independent, default-deny grants.
 4. **Publication Status** — separate from business status; see below.
 
@@ -37,11 +57,31 @@ by a different workspace.
 
 ## Property status model
 
-Business status (independent of publication):
+Business status (independent of publication) — **implemented, Milestone
+3**:
 
 - `AVAILABLE`, `RESERVED`, `SOLD`, `RENTED`, `OFF_MARKET`, `ARCHIVED`
 
-Publication lifecycle (independent of business status):
+Allowed transitions (`PropertiesService.ALLOWED_STATUS_TRANSITIONS`),
+via `POST .../properties/:id/status`:
+
+| From | Can move to |
+|---|---|
+| `AVAILABLE` | `RESERVED`, `SOLD`, `RENTED`, `OFF_MARKET` |
+| `RESERVED` | `AVAILABLE`, `SOLD`, `RENTED`, `OFF_MARKET` |
+| `OFF_MARKET` | `AVAILABLE`, `RESERVED`, `SOLD`, `RENTED` |
+| `SOLD` | `AVAILABLE`, `OFF_MARKET` (undoing a mistaken sale mark) |
+| `RENTED` | `AVAILABLE`, `OFF_MARKET` |
+| `ARCHIVED` | nothing — restore first |
+
+Deliberately excluded: `SOLD ↔ RENTED` directly, and `SOLD`/`RENTED` →
+`RESERVED` — both would skip back through `AVAILABLE` first, which
+doesn't correspond to any real-world event. `ARCHIVED` is reachable only
+via `POST .../properties/:id/archive`, never the generic status
+endpoint — see "Archive, not delete" below.
+
+Publication lifecycle (independent of business status, **not yet
+built** — Milestone 5):
 
 - `PRIVATE` → `PENDING_REVIEW` → `UNDER_REVIEW` →
   `CHANGES_REQUIRED` / `APPROVED` → `PUBLISHED`, or `REJECTED`;
@@ -57,37 +97,108 @@ submit on a freelance agent's behalf only with explicit `property.publish`
 permission, and only for that specific property; this never transfers
 ownership.
 
-## Sensitive permissions (independent, default-deny)
+## Sensitive property fields (Milestone 3 — implemented for `property.view_owner`/`view_private_notes`/`view_commission`/`view_exact_location`; the rest remain foundation-only)
 
 | Permission | Grants |
 |---|---|
 | `property.view` | Basic visibility into a property record |
 | `property.edit` | Modify a property record |
-| `property.share` | Share a property with another workspace (collaboration) |
-| `property.publish` | Submit a property for publication review |
-| `property.unpublish` | Remove a published property from the marketplace |
-| `property.create_presentation` | Build a presentation/PDF from a property |
-| `property.view_owner` | View owner contact details |
-| `property.view_private_notes` | View private internal notes |
-| `property.view_commission` | View commission information |
-| `property.view_exact_location` | View exact saved coordinates (vs. approximate) |
+| `property.share` | Share a property with another workspace (collaboration) — not built yet |
+| `property.publish` | Submit a property for publication review — not built yet |
+| `property.unpublish` | Remove a published property from the marketplace — not built yet |
+| `property.create_presentation` | Build a presentation/PDF from a property — not built yet |
+| `property.view_owner` | View **and edit** owner contact details |
+| `property.view_private_notes` | View **and edit** private internal notes |
+| `property.view_commission` | View **and edit** commission information (also requires `property.view_private_notes`, since commission lives inside the private-details record) |
+| `property.view_exact_location` | View exact saved coordinates (vs. approximate) — read-only gate, see below |
 
-`property.view` never implies any of the others. Any permission not
-explicitly granted is denied.
+`property.view` never implies any of the others — a caller with only
+`property.view` gets the property's core fields and nothing from
+`owners`/`privateDetails`/`location`; those keys are **omitted from the
+response entirely**, never returned as `null` or masked, so there's no
+way to distinguish "no data on file" from "not authorized to see it."
+See `apps/api/src/properties/property.mapper.ts` and
+`apps/api/test/property-sensitive-fields.e2e-spec.ts`.
+
+**Write is gated the same as read, except for location.** A caller
+can't write owner info, private notes, or commission notes without
+holding the matching view permission — a user who can't see owner data
+shouldn't be able to blindly overwrite it either
+(`PropertiesService.assertCanWriteSensitiveSections`). Location is the
+one deliberate exception: every property needs a location the moment
+it's created, so writing it only needs `property.create`/`property.edit`;
+only *reading the exact coordinates back* needs
+`property.view_exact_location`. A caller can therefore save a location
+they can't see the precise value of afterward — an intentional,
+documented asymmetry, not a bug.
+
+**Seeded role defaults (Milestone 3 update):** `WORKSPACE_OWNER` and
+`COMPANY_ADMIN` hold all four sensitive-view permissions. `MANAGER` and
+`AGENT` hold `property.view_owner`, `property.view_private_notes`, and
+`property.view_exact_location` — core data needed to work a property
+day-to-day, including the property they themselves just entered — but
+**not** `property.view_commission`, kept restricted to owner/admin
+roles as the one financially-sensitive field. `VIEWER` holds none of
+the four, by design: it's the role that proves basic `property.view`
+never implies sensitive access.
+
+## Archive, not delete (Milestone 3)
+
+Retiring a property never hard-deletes it — `POST
+.../properties/:id/archive` sets `propertyStatus = ARCHIVED` and stamps
+`archivedAt`/`archivedByUserId`, preserving the row and every related
+`PropertyLocation`/`PropertyFeature`/`PropertyMedia`/`PropertyOwner`/
+`PropertyPrivateDetails` record untouched. `property.archive` also
+gates the inverse action, `POST .../properties/:id/restore` — the same
+permission governs both halves of one reversible lifecycle capability,
+so there's no separate "restore" permission to keep in sync. Restore
+always lands on `OFF_MARKET`, never the property's prior status, so an
+agent consciously decides to re-list rather than a property silently
+reappearing as `AVAILABLE`. An archived property also can't be edited or
+have its status changed through the ordinary endpoints (`409`) until
+it's restored.
+
+## Google Maps strategy (Milestone 3)
+
+- The saved `latitude`/`longitude` (`PropertyLocation`, `Decimal(9,6)`)
+  are the **permanent source of truth** the moment a property is saved
+  — reopening it years later shows the exact same pin, regardless of
+  whether the Google Place behind it still exists or has moved.
+  `googlePlaceId` is stored as a convenience reference only, never
+  relied on exclusively.
+- `locationSource` records how the agent captured the pin —
+  `GOOGLE_SEARCH`, `MAP_PIN`, `CURRENT_LOCATION`, or `MANUAL` — for
+  provenance, not authorization.
+- The mobile location picker (see docs/PRODUCT.md "Mobile property
+  flow") only requests device location permission for the explicit
+  "Use current location" action — never merely to view or edit a
+  property that already has a saved pin.
+- A full interactive map/search/autocomplete picker needs
+  `react-native-maps` and a configured Google Maps API key, neither of
+  which is available in this environment; see docs/API.md "Google Maps
+  setup" for the documented follow-up and the provider-boundary hook
+  (`useCurrentLocation`) it slots behind without changing any screen
+  that calls it.
 
 ## Location visibility
 
-Independent of the permissions above, each property has a location
-visibility setting controlling what the *public marketplace* (not
-workspace members) can see:
+Independent of the permissions above, each property has a
+`locationVisibility` column (`PropertyLocation.locationVisibility`,
+Milestone 3) controlling what the *public marketplace* (not workspace
+members) will eventually be able to see:
 
-- `PRIVATE`, `WORKSPACE`, `PUBLIC_APPROXIMATE`, `PUBLIC_EXACT`
+- `PRIVATE` (default), `WORKSPACE`, `PUBLIC_APPROXIMATE`, `PUBLIC_EXACT`
 
-Saved latitude/longitude/Google Place ID are always the source of truth
-in the database. Clients never receive exact coordinates unless the
-property's location visibility is `PUBLIC_EXACT`, or exact-location
-access is separately granted via `property.view_exact_location`
-(workspace/collaboration context) or a secure private share.
+**Field exists, not yet enforced.** No public/client-facing endpoint
+reads this field yet — that's Milestone 5/6. Today, professional-side
+access to exact coordinates is governed entirely by
+`property.view_exact_location` (see "Sensitive property fields" above),
+which is independent of this column. Saved latitude/longitude/Google
+Place ID are always the source of truth in the database regardless of
+visibility setting; a future public DTO
+(`PropertyLocationPublic`/`toPropertyPublicDetail`, already scaffolded
+in `apps/api/src/properties/property.mapper.ts` as foundation) will read
+`city`/`area` only, never exact coordinates.
 
 ## Collaboration lifecycle
 
@@ -337,19 +448,32 @@ standalone script, `apps/api/scripts/bootstrap-super-admin.ts` (run via
 (registered through the normal flow), and idempotently grants the role,
 writing an audit log entry with `actorUserId: null` (system action).
 
-## Status (Milestone 2)
+## Status (Milestone 3)
 
-Implemented: workspace isolation and switching, membership lifecycle
-(invite → accept → suspend/remove/role-change), the full permission
-catalog and system role seed above, the workspace/platform scope
-separation and its structural enforcement, custom per-workspace roles,
-the admin user directory and moderation endpoints, company moderation
-(suspend/deactivate/restore), platform role grant/revoke, both lockout
-protections, and pagination on `GET /workspaces/:id/members`. Not yet
-built: property,
-CRM, matching, messaging, viewings, collaboration, commission,
-subscriptions, payments, and a full admin frontend — those remain future
-milestones, and this document continues to define their target
-permission model above (the `property.*`/`client.*`/`collaboration.*`
-keys exist in the catalog today but are not yet checked by any
-endpoint).
+Implemented through Milestone 2: workspace isolation and switching,
+membership lifecycle (invite → accept → suspend/remove/role-change),
+the full permission catalog and system role seed above, the
+workspace/platform scope separation and its structural enforcement,
+custom per-workspace roles, the admin user directory and moderation
+endpoints, company moderation (suspend/deactivate/restore), platform
+role grant/revoke, both lockout protections, and pagination on `GET
+/workspaces/:id/members`.
+
+Milestone 3 adds: the full `Property` CRUD/search/archive lifecycle,
+ownership-vs-authorship (`workspaceId`/`createdByUserId`), business
+status transitions, the Google Maps location model, sensitive-field
+permission enforcement (`property.view_owner`/`view_private_notes`/
+`view_commission`/`view_exact_location`, each independently gated and
+each omitted rather than masked when unauthorized), the flexible
+feature/amenity catalog, private-media storage via a signed-URL
+provider abstraction, and the first mobile screens (sign-in, bottom-tab
+shell, Properties list/add/detail).
+
+Not yet built: CRM, matching, messaging, viewings, publication/public
+marketplace, collaboration, commission agreements, subscriptions,
+payments, and a full admin frontend — those remain future milestones,
+and this document continues to define their target permission model
+above (`property.publish`/`property.share`/`client.*`/
+`collaboration.*` keys exist in the catalog today but are not yet
+checked by any endpoint; `PropertyLocation.locationVisibility` exists
+in the schema but no public endpoint reads it yet).

@@ -58,6 +58,55 @@ registration → email verification + phone OTP verification → activation.
 See `docs/API.md` for the concrete endpoints and `docs/DATABASE.md` for
 the activation/idempotency guarantees behind "exactly one" above.
 
+## Professional property database (Milestone 3)
+
+Every AGENT personal workspace and every COMPANY workspace now has a real
+private property database behind it — this is the "central value
+proposition" above, implemented:
+
+- **Ownership vs. authorship.** A property belongs to exactly one
+  workspace (`workspaceId`) — the business owner of the record. Whoever
+  actually typed it in (`createdByUserId`) is a separate concept: a
+  company employee creating a property still creates it for the
+  company's workspace, never their own personal one. See
+  `docs/PERMISSIONS.md` "Property ownership vs. authorship."
+- **Business status, not publication status.** `AVAILABLE` /
+  `RESERVED` / `SOLD` / `RENTED` / `OFF_MARKET` / `ARCHIVED` describe the
+  deal's real-world state. Whether a property is visible on the public
+  marketplace is a completely separate lifecycle that doesn't exist yet
+  (Milestone 5) — a property can be `AVAILABLE` and privately-held for
+  months before any publication concept applies to it.
+- **The Google Maps promise.** An exact pin (latitude/longitude,
+  optionally a Google Place ID) is saved once and is the permanent
+  source of truth — reopening a property years later shows the exact
+  same location. See `docs/PERMISSIONS.md` "Google Maps strategy."
+- **Sensitive data stays sensitive.** Owner contact info, private
+  internal notes, and commission figures are never returned unless the
+  viewer specifically holds the matching permission — `property.view`
+  alone reveals none of them. See `docs/PERMISSIONS.md` "Sensitive
+  property fields."
+- **Archive, never delete.** Retiring a property uses the same
+  reversible-moderation pattern as Milestone 2's user/company
+  moderation: `ARCHIVED` is a status, not a deletion, and restore is
+  always available.
+
+### Mobile property flow (Milestone 3)
+
+`apps/mobile` now has its first real screens beyond the Expo starter:
+sign-in, a bottom-tab shell (Home / Properties / Clients / Inbox / More
+— only Properties has business logic this milestone, the rest are
+labeled placeholders, not dead buttons), and three Properties screens
+(list with search/status filters, add, detail). The "Add Property" form
+is a single scrollable form covering every field the product spec's
+step list calls for (type/purpose, basics, price, rooms/area, features,
+location, owner, private notes) rather than a literal multi-screen
+wizard — a deliberate simplification, not a missing feature. Location
+entry is manual lat/lng plus an explicit "Use current location" button
+(the only moment the app requests location permission); a full
+interactive map/search picker is the documented follow-up once
+`react-native-maps` and a Google Maps API key are wired in — see
+`docs/API.md` "Google Maps setup" for exactly what that involves.
+
 ## Build order
 
 The platform is built milestone by milestone; see the root

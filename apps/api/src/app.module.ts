@@ -10,6 +10,8 @@ import { AuthModule } from './auth/auth.module';
 import { AuthorizationModule } from './authorization/authorization.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { AdminModule } from './admin/admin.module';
+import { StorageModule } from './storage/storage.module';
+import { PropertiesModule } from './properties/properties.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -36,6 +38,8 @@ import { AppService } from './app.service';
     AuthModule,
     WorkspacesModule,
     AdminModule,
+    StorageModule,
+    PropertiesModule,
   ],
   controllers: [AppController],
   providers: [

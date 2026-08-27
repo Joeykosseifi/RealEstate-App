@@ -147,7 +147,15 @@ export const WORKSPACE_ROLES: RoleDefinition[] = [
       PROPERTY_VIEW.key,
       PROPERTY_CREATE.key,
       PROPERTY_EDIT.key,
+      PROPERTY_ARCHIVE.key,
       PROPERTY_CREATE_PRESENTATION.key,
+      // Owner contact, private notes, and exact location are core data
+      // needed to work a property day-to-day (see Milestone 3) — only
+      // commission (financial split) stays restricted to owner/admin
+      // roles, see docs/PERMISSIONS.md "Sensitive property fields."
+      PROPERTY_VIEW_OWNER.key,
+      PROPERTY_VIEW_PRIVATE_NOTES.key,
+      PROPERTY_VIEW_EXACT_LOCATION.key,
       CLIENT_VIEW.key,
       CLIENT_CREATE.key,
       CLIENT_EDIT.key,
@@ -164,7 +172,12 @@ export const WORKSPACE_ROLES: RoleDefinition[] = [
       PROPERTY_VIEW.key,
       PROPERTY_CREATE.key,
       PROPERTY_EDIT.key,
+      PROPERTY_ARCHIVE.key,
       PROPERTY_CREATE_PRESENTATION.key,
+      // See MANAGER above — same rationale.
+      PROPERTY_VIEW_OWNER.key,
+      PROPERTY_VIEW_PRIVATE_NOTES.key,
+      PROPERTY_VIEW_EXACT_LOCATION.key,
       CLIENT_VIEW.key,
       CLIENT_CREATE.key,
       CLIENT_EDIT.key,
