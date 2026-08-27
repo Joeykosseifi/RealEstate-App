@@ -4,3 +4,6 @@ export * from './auth';
 export * from './workspace';
 export * from './admin';
 export * from './property';
+export * from './client';
+export * from './matching';
+export * from './presentation';

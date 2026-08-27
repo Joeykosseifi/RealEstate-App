@@ -6,15 +6,19 @@
   migration under `prisma/migrations/`. Never mutate the database outside
   of a migration.
 
-## Current state (Milestone 3)
+## Current state (Milestone 4)
 
 Milestone 0 shipped only the `datasource`/`generator` blocks. Milestone 1
 added authentication, users, verification, sessions, and the minimum
 workspace/company/role foundation needed for automatic workspace creation
 on account activation. Milestone 2 built the full workspace/permission
-engine and platform admin authorization. Milestone 3 (this revision)
-adds the professional private property database — `Property` and its
-related models.
+engine and platform admin authorization. Milestone 3 added the
+professional private property database — `Property` and its related
+models. Milestone 4 (this revision) adds the client CRM (`ClientRecord`),
+per-client property requirements (`ClientRequirement`), a shortlist
+relationship (`ClientPropertyShortlist`), and client-facing PDF
+presentations (`PropertyPresentation`/`PropertyPresentationItem`).
+Matching itself is computed on demand — see "Recalculate matches" below.
 
 ### Property models (Milestone 3)
 
@@ -76,6 +80,29 @@ related models.
   always server-generated and resolved from the `PropertyMedia` row
   before any read/delete — a client can never name a storage key
   directly.
+
+### Client CRM / matching / presentation models (Milestone 4)
+
+| Model | Purpose |
+|---|---|
+| `ClientRecord` | An agent's/company's own customer — NOT a platform `User` account (`AccountType.CLIENT`). Same ownership-vs-authorship split as `Property`: `workspaceId` immutable business owner, `createdByUserId` author. `assignedToUserId`/`platformUserId`/`archivedByUserId` are plain scalar references (no Prisma relation), matching `Property.archivedByUserId`'s exact precedent. |
+| `ClientRequirement` | A client's property search criteria — a client may have any number at once. `workspaceId`/`createdByUserId` are denormalized from the parent client at creation (immutable, re-validated on every write) so requirement queries don't need a join. Hard (must-have) criteria are typed columns evaluated as SQL filters by the matching engine; `preferredFeatures` is the one purely soft (score-only) column. |
+| `ClientPropertyShortlist` | A property saved for a client, optionally tied to the requirement that motivated it. `@@unique([clientId, propertyId])` prevents a duplicate shortlist entry at the database level, not just in application code. |
+| `PropertyPresentation` | A client-facing PDF built from selected properties. `clientId`/`requirementId` are optional. `storageKey`/`generatedAt` always point at the most recently generated PDF — see "Presentation versioning" below. |
+| `PropertyPresentationItem` | The properties in one presentation, in send order (`sortOrder`) with an optional per-property `agentNote`. No per-item snapshot fields — see "Presentation snapshot strategy" below. |
+
+### Design decisions worth knowing (Milestone 4)
+
+- **No stored match-result table.** Matching (`apps/api/src/clients/matching.service.ts`) always computes fresh from current `Property`/`ClientRequirement` data — a property's price, status, or features can change after the fact, and there is no meaningful "match record" to keep in sync. Hard filtering happens in the SQL `WHERE` clause (workspace-scoped first, so an unauthorized property is never fetched at all); scoring and explanation are pure functions (`matching-engine.ts`) over the already-filtered candidates.
+- **Match score formula, centrally documented** (`apps/api/src/clients/matching-score.config.ts`): a candidate that reaches scoring has already passed every hard filter, so `BASE_SCORE` (60) represents "meets every must-have." The remaining 40 points are distributed evenly across however many preferred features the requirement lists; zero preferred features scores 100 automatically. Deliberately no graded "closeness" scoring on price/bedrooms/area (e.g. cheaper-is-better) — that would be exactly the kind of subjective magic number this configuration is meant to avoid.
+- **Matching currency rule.** Prices are never compared across currencies: when a requirement has a price bound, the candidate query also filters on `currency = requirement.currency` (required by validation whenever a price bound is set) — a property in a different currency simply has no price-based matches, rather than being silently compared numerically.
+- **Location arrays combined with OR.** `countries`/`cities`/`areas` on a requirement are three independent arrays, but a candidate need only match ONE of them (not all three) when any are set — a client accepting "Jounieh, Kaslik, Zouk Mikael" lists those across `cities`/`areas` and expects a match against any single one, not a match against every populated dimension simultaneously.
+- **Match ordering is deterministic and stable.** Results sort by score descending, then property id ascending as a fixed tiebreaker — two requests against unchanged data always return identically ordered results.
+- **Presentation snapshot strategy.** Rather than duplicating property fields onto `PropertyPresentationItem` (a "snapshot" table), the generated PDF binary itself — stored via `StorageService`, referenced by `PropertyPresentation.storageKey` — is the historical record of exactly what was sent. Regenerating always reads current property data by design; editing a presentation's items/title never touches a previously generated artifact.
+- **Presentation versioning.** Pressing "Generate" writes a brand-new object under a new, generation-timestamp-keyed key (`buildPresentationStorageKey`, `apps/api/src/storage/local-disk-storage.service.ts`) and repoints `storageKey`/`generatedAt` at it — it never overwrites the previous artifact in place. The previous artifact is left in storage (not deleted, not referenced anywhere once superseded). Editing a `GENERATED` presentation's title/items/notes moves its status back to `DRAFT` without touching the still-accessible previous artifact until an explicit regeneration.
+- **Presentation PDF generation library.** `pdfkit` — chosen over a headless browser (Puppeteer/Playwright) because this codebase had no existing PDF dependency and no other reason to carry a full Chromium binary. `pdfkit` is pure Node, ships Helvetica built in (no font files to bundle), and its imperative drawing API produces the same page content every time for the same input. Generated with `compress: false` so an e2e test can assert directly against the artifact's raw bytes that sensitive data never appears in it — see `apps/api/test/presentation-security.e2e-spec.ts`.
+- **Presentation reorder concurrency.** `PresentationsService.update()` locks the `PropertyPresentation` row (`SELECT ... FOR UPDATE`) before its delete-then-recreate of `PropertyPresentationItem` rows — without this, two concurrent updates naming overlapping item sets can each observe "no existing rows" for a property they're both about to insert under READ COMMITTED, tripping the `(presentationId, propertyId)` unique constraint. Found by `apps/api/test/crm-concurrency.e2e-spec.ts`, fixed with the same row-locking technique `PropertyMediaService.reorder` uses for the identical reason (see Milestone 3 above).
+- **Shortlist duplicate prevention is a database constraint**, not just an application-layer check (`@@unique([clientId, propertyId])`) — verified under real concurrent requests in `apps/api/test/crm-concurrency.e2e-spec.ts`.
 
 ### Models
 
@@ -153,7 +180,7 @@ exercise this directly.
 | 1 | ✅ `User`, `UserSession`, `EmailVerification`, `PhoneVerification`, `PasswordReset`, `Company`, `Workspace`, `WorkspaceMember`, `Role`, `Permission`, `RolePermission`, `AuditLog` |
 | 2 | ✅ `UserPlatformRole`; `Role`/`Permission` scope split; full workspace management + admin authorization API |
 | 3 | ✅ `Property`, `PropertyLocation`, `PropertyFeature`, `PropertyMedia`, `PropertyOwner`, `PropertyPrivateDetails` |
-| 4 | CRM `Client`, `ClientRequirement`, match results, `Presentation` |
+| 4 | ✅ `ClientRecord`, `ClientRequirement`, `ClientPropertyShortlist`, `PropertyPresentation`, `PropertyPresentationItem` (no match-result table — matching is computed on demand) |
 | 5 | Publication review/moderation records |
 | 6 | Client favorites, public marketplace read models |
 | 7 | `Conversation`, `Message`, `Viewing` |

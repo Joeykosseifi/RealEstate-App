@@ -201,6 +201,104 @@ permissioned capability. See docs/DATABASE.md "Property media storage."
 | `DELETE .../media/:mediaId` | `property.edit` | Storage key is always resolved from the database, never accepted from the client. Deletes the object and the row; `204`. |
 | `GET storage/access?key=&exp=&sig=` | — (signature-verified, not Bearer-authenticated) | The actual signed download endpoint a `access-url` response points to — mirrors how a real S3 presigned URL works. `401` on a missing/invalid/expired signature. |
 
+## Client CRM, matching & presentation endpoints (Milestone 4)
+
+All under `/api/v1`, workspace-rooted exactly like Property. A client,
+requirement, shortlist entry, or presentation belonging to a different
+workspace than `:id` is a `404`, not a `403` — same isolation rule as
+Property.
+
+### Client endpoints
+
+| Method & path | Permission | Notes |
+|---|---|---|
+| `POST workspaces/:id/clients` | `client.create` | `workspaceId`/`createdByUserId` server-derived. Optional `assignedToUserId` additionally requires `client.assign` and is re-verified (same workspace, ACTIVE membership). `201`. |
+| `GET workspaces/:id/clients` | `client.view` | Paginated, filterable — see "Client search" below. Excludes `ARCHIVED` unless `status=ARCHIVED` or `includeArchived=true`. |
+| `GET workspaces/:id/clients/:clientId` | `client.view` | Returns active requirements, the shortlist, and a presentation count. Never includes a linked platform account's authentication secrets (no linking is built yet — `platformUserId` is a reserved, unenforced field). |
+| `PATCH workspaces/:id/clients/:clientId` | `client.edit` | No `workspaceId`/`createdByUserId`/`assignedToUserId` field exists on this DTO — unknown fields rejected outright. `409` if the client is `ARCHIVED`. |
+| `POST workspaces/:id/clients/:clientId/assign` | `client.assign` | `{ assignedToUserId: string \| null }` — `null` unassigns. Target re-verified server-side; `409` if not an ACTIVE member of the same workspace. Assigning grants no additional permissions. |
+| `POST workspaces/:id/clients/:clientId/archive` | `client.archive` | Reversible. `409` if already archived. `204`. |
+| `POST workspaces/:id/clients/:clientId/restore` | `client.archive` | `409` unless currently `ARCHIVED`. Always lands on `INACTIVE`. `204`. |
+
+### Client search (Milestone 4)
+
+`GET workspaces/:id/clients` query parameters: `page`, `pageSize`
+(default 20, max 100), `search` (first/last name, phone, WhatsApp
+phone, email — case-insensitive `contains`), `status`, `source`,
+`assignedToUserId`, `createdByUserId`, `createdFrom`/`createdTo`,
+`includeArchived`, `sortOrder`.
+
+### Client requirement endpoints
+
+Nested under `workspaces/:id/clients/:clientId/requirements`, reusing
+`client.view`/`client.edit` — a requirement is a sub-resource of a
+client, exactly like `PropertyLocation` is a sub-resource of a
+property. A client may have any number of requirements at once.
+
+| Method & path | Permission | Notes |
+|---|---|---|
+| `POST .../requirements` | `client.edit` | See docs/PERMISSIONS.md and docs/DATABASE.md for the hard-vs-soft criteria split. `currency` required whenever `minPrice`/`maxPrice` is set. `201`. |
+| `GET .../requirements` | `client.view` | Excludes `ARCHIVED` unless `?includeArchived=true`. |
+| `PATCH .../requirements/:requirementId` | `client.edit` | No `clientId`/`workspaceId`/`createdByUserId` field exists on this DTO. `409` if archived. |
+| `POST .../requirements/:requirementId/archive` | `client.edit` | Reversible in spirit (row never deleted); no restore endpoint — create a fresh requirement instead. `204`. |
+
+### Matching endpoint (Milestone 4)
+
+| Method & path | Permission | Notes |
+|---|---|---|
+| `GET workspaces/:id/clients/:clientId/requirements/:requirementId/matches` | `client.view` **and** `property.view` | Both required — the guard checks `client.view`; `property.view` is checked explicitly inside `MatchingService`. Query params: `page`, `pageSize`, `minScore` (0-100). Computed fresh on every call — see docs/DATABASE.md "No stored match-result table." |
+
+### Shortlist endpoints (Milestone 4)
+
+Nested under `workspaces/:id/clients/:clientId/shortlist`.
+
+| Method & path | Permission | Notes |
+|---|---|---|
+| `POST .../shortlist` | `client.edit` **and** `property.view` | `{ propertyId, requirementId?, note? }`. Property and (optional) requirement re-verified against the caller's workspace. `409` on a duplicate `(clientId, propertyId)` — enforced by a database unique constraint, not just an application check. `201`. |
+| `GET .../shortlist` | `client.view` | Not paginated — a shortlist is expected to stay small. |
+| `DELETE .../shortlist/:shortlistId` | `client.edit` | Removes only that one entry; the client, property, and every other relationship are untouched. `204`. |
+
+### Presentation endpoints (Milestone 4)
+
+All under `workspaces/:id/presentations`, all requiring
+`property.create_presentation` — the single feature gate for the whole
+surface (see docs/PERMISSIONS.md "Presentation authorization"). Every
+selected `propertyId`/`clientId`/`requirementId` is independently
+re-verified against the caller's workspace inside `PresentationsService`.
+
+| Method & path | Notes |
+|---|---|
+| `POST workspaces/:id/presentations` | `{ title, clientId?, requirementId?, items: [{ propertyId, agentNote? }] }` — 1 to 50 items. Every property must belong to this workspace (`400` otherwise). `201`. |
+| `GET workspaces/:id/presentations` | Paginated; optional `clientId`/`status`/`includeArchived` filters. |
+| `GET workspaces/:id/presentations/:presentationId` | Returns items with `PresentationSafePropertySnapshot` data (see below) — never `storageKey` directly. |
+| `PATCH workspaces/:id/presentations/:presentationId` | Whole-list replace semantics for `items` when present, same convention as `UpdatePropertyDto`. Editing a `GENERATED` presentation's title/items moves it back to `DRAFT` without touching the still-accessible previously generated PDF. `409` if archived. |
+| `POST workspaces/:id/presentations/:presentationId/generate` | Builds a PDF via `pdfkit` from `PresentationSafePropertySnapshot` data only (see docs/PERMISSIONS.md "Never in PDF by default" below), stores it via `StorageService` under a new generation-timestamped key, and repoints `storageKey`/`generatedAt` — see docs/DATABASE.md "Presentation versioning." `200`. |
+| `GET workspaces/:id/presentations/:presentationId/access-url` | Returns `{ url }` — a signed, time-limited URL to `GET /storage/access`, the same endpoint property media uses. `409` if never generated. |
+| `POST workspaces/:id/presentations/:presentationId/archive` | Reversible in spirit (row, items, and every previously generated artifact preserved); no restore endpoint — recreate if still needed. `204`. |
+
+**PDF generation library choice:** `pdfkit` — pure Node, no headless
+browser to manage in production, ships Helvetica built in, and its
+imperative API produces the same page content for the same input every
+time. See docs/DATABASE.md "Design decisions worth knowing (Milestone
+4)" for the full rationale versus Puppeteer/Playwright.
+
+**PDF generation resilience:** a property with no image, or with
+unreadable/corrupt/unsupported image bytes, never breaks generation —
+`PdfGeneratorService` catches image-embedding failures per property and
+simply omits that image, keeping every text section intact.
+
+**Never in the PDF by default:** owner name/phone/email, commission
+notes, internal notes, acquisition source, internal reference,
+admin/moderation metadata, exact latitude/longitude, or private
+documents. This isn't a rendering-code discipline — it's structural:
+generation is built exclusively from `PresentationSafePropertySnapshot`
+(`apps/api/src/properties/property.mapper.ts` `toPresentationSafeSnapshot`),
+a fixed-shape type that has no fields for any of the above, so there is
+no code path that could leak them into a PDF. Location shows only
+`city`/`area`/`country` text — never the exact saved pin. Verified
+directly against generated PDF bytes (not just the DTO) in
+`apps/api/test/presentation-security.e2e-spec.ts`.
+
 ### Mobile setup (Milestone 3)
 
 `apps/mobile` reads `EXPO_PUBLIC_API_URL` (defaults to
@@ -244,6 +342,27 @@ both hold picker state as a `LocationDraft`
 (`apps/mobile/src/location/locationPayload.ts`) and only ever send a
 wire payload through `toLocationDto`, an explicit allowlist of the
 fields `PropertyLocationDto` accepts.
+
+### Mobile Clients tab (Milestone 4)
+
+The Clients bottom tab (previously a placeholder) is now a full stack:
+client list/search/add, client detail (contact info, requirements,
+shortlist, presentations, archive/restore), an "Add Requirement" form
+that visually distinguishes **Must Have** from **Preferred** criteria,
+ranked match-result cards with per-criterion ✓/✗ explanations and
+"Add to Shortlist," a shortlist screen with multi-select and "Create
+Presentation," and a create/view presentation flow ending in "Generate
+PDF" plus "View"/"Share" (the OS's native share sheet — no in-app
+messaging is built here; the agent sends the PDF via WhatsApp/email
+manually).
+
+Since permission-gated UI (e.g. hiding "Archive" without
+`client.archive`) needs the caller's resolved permission set, and
+`GET /workspaces` (used to populate the workspace switcher) doesn't
+return it, `AuthContext` additionally calls `GET /workspaces/:id` — the
+one workspace endpoint that does return `permissions: string[]` —
+whenever the acting workspace changes, and exposes it as
+`permissions: Set<string>` alongside `currentWorkspace`.
 
 ## N+1 prevention
 

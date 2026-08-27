@@ -7,6 +7,7 @@ import type {
   PropertyPrivateDetails,
 } from '@prisma/client';
 import type {
+  PresentationSafePropertySnapshot,
   PropertyFeatureSummary,
   PropertyLocationInternal,
   PropertyListItem,
@@ -232,5 +233,57 @@ export function toPropertyPublicDetail(
       ? { city: property.location.city, area: property.location.area }
       : null,
     primaryMedia: primaryMediaOf(property.media),
+  };
+}
+
+/**
+ * Deliberately narrower than `PropertyWithRelations` — this query
+ * projection never fetches `owners`/`privateDetails`/exact
+ * `latitude`/`longitude` at all, which is what makes the omission
+ * guarantee below structural rather than a mapping discipline. See
+ * `apps/api/src/clients/matching.service.ts` and
+ * `apps/api/src/presentations/pdf-generator.service.ts`, the two
+ * callers.
+ */
+export type PropertyForPresentationSnapshot = Property & {
+  location: Pick<PropertyLocation, 'city' | 'area' | 'country'> | null;
+  features: Pick<PropertyFeature, 'featureKey' | 'value'>[];
+};
+
+/**
+ * Milestone 4 — the fixed-shape summary used by both property matching
+ * results and PDF presentation generation. Unlike
+ * `toPropertyProfessionalDetail`, this function takes no `permissions`
+ * parameter and has no conditional sections — it is structurally
+ * impossible for it to return owner information, commission notes,
+ * private notes, or exact coordinates, regardless of what the caller is
+ * authorized to see, because its input type has no fields for them.
+ * `primaryImageUrl` is resolved by the caller (a signed URL lookup is
+ * I/O, so this mapper stays a pure, synchronous function like every
+ * other one in this file).
+ */
+export function toPresentationSafeSnapshot(
+  property: PropertyForPresentationSnapshot,
+  primaryImageUrl: string | null,
+): PresentationSafePropertySnapshot {
+  return {
+    id: property.id,
+    title: property.title,
+    description: property.description,
+    propertyType: property.propertyType,
+    listingPurpose: property.listingPurpose,
+    price: Number(property.price),
+    currency: property.currency,
+    bedrooms: property.bedrooms,
+    bathrooms: property.bathrooms,
+    areaSqm: property.areaSqm ? Number(property.areaSqm) : null,
+    propertyStatus: property.propertyStatus,
+    city: property.location?.city ?? null,
+    area: property.location?.area ?? null,
+    country: property.location?.country ?? null,
+    featureKeys: property.features
+      .filter((feature) => feature.value)
+      .map((feature) => feature.featureKey),
+    primaryImageUrl,
   };
 }

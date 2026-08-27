@@ -7,17 +7,23 @@
 // Milestone 2: the full authorization foundation — workspace/platform
 // role scoping, the permission catalog, platform (admin) roles, and the
 // moderation fields user suspension/deactivation/restoration need.
-// Milestone 3 (this revision): the professional private property
-// database — Property and its related models (location, features,
-// media, owner contacts, private details). See docs/DATABASE.md for the
-// full model-introduction schedule and the rationale behind specific
-// design choices (e.g. `User.pendingCompanyProfile`, the workspace type
-// CHECK constraint, the Role scope/uniqueness design, and the
-// Milestone 3 property design decisions below).
+// Milestone 3: the professional private property database — Property
+// and its related models (location, features, media, owner contacts,
+// private details).
+// Milestone 4 (this revision): client CRM (ClientRecord), per-client
+// property requirements (ClientRequirement), a shortlist relationship
+// (ClientPropertyShortlist), and client-facing PDF presentations
+// (PropertyPresentation/PropertyPresentationItem). Matching itself is
+// computed on demand from current data (see MatchingService) — no
+// match-result table. See docs/DATABASE.md for the full
+// model-introduction schedule and the rationale behind specific design
+// choices (e.g. `User.pendingCompanyProfile`, the workspace type CHECK
+// constraint, the Role scope/uniqueness design, and the Milestone 3/4
+// design decisions below).
 //
-// Do not add CRM/matching/collaboration/publication/subscription models
-// yet — those belong to later milestones. Publication status is
-// deliberately NOT part of Property yet (Milestone 5).
+// Do not add collaboration/publication/subscription models yet — those
+// belong to later milestones. Publication status is deliberately NOT
+// part of Property yet (Milestone 5).
 
 generator client {
   provider = "prisma-client-js"
@@ -145,11 +151,13 @@ model User {
   phoneVerifications   PhoneVerification[]
   passwordResets       PasswordReset[]
   workspaceMemberships WorkspaceMember[]
-  personalWorkspace    Workspace?          @relation("PersonalWorkspaceOwner")
-  companiesCreated     Company[]           @relation("CompanyCreatedBy")
-  auditLogs            AuditLog[]          @relation("AuditActor")
+  personalWorkspace    Workspace?             @relation("PersonalWorkspaceOwner")
+  companiesCreated     Company[]              @relation("CompanyCreatedBy")
+  auditLogs            AuditLog[]             @relation("AuditActor")
   platformRoles        UserPlatformRole[]
-  createdProperties    Property[]          @relation("PropertyCreatedBy")
+  createdProperties    Property[]             @relation("PropertyCreatedBy")
+  createdClientRecords ClientRecord[]         @relation("ClientRecordCreatedBy")
+  createdPresentations PropertyPresentation[] @relation("PresentationCreatedBy")
 
   @@map("users")
 }
@@ -284,9 +292,11 @@ model Workspace {
   companyId String?  @unique @db.Uuid
   company   Company? @relation(fields: [companyId], references: [id])
 
-  members     WorkspaceMember[]
-  customRoles Role[]            @relation("WorkspaceCustomRoles")
-  properties  Property[]
+  members       WorkspaceMember[]
+  customRoles   Role[]                 @relation("WorkspaceCustomRoles")
+  properties    Property[]
+  clients       ClientRecord[]
+  presentations PropertyPresentation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -562,6 +572,8 @@ model Property {
   media          PropertyMedia[]
   owners         PropertyOwner[]
   privateDetails PropertyPrivateDetails?
+  shortlistedFor ClientPropertyShortlist[]
+  presentedIn    PropertyPresentationItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -693,4 +705,295 @@ model PropertyPrivateDetails {
   updatedAt DateTime @updatedAt
 
   @@map("property_private_details")
+}
+
+// ---------------------------------------------------------------------------
+// Milestone 4 — Client CRM, requirements, shortlist, presentations
+//
+// A ClientRecord (an agent's/company's own customer) belongs to exactly
+// one workspace, following the identical ownership-vs-authorship split
+// as Property: `workspaceId` is the immutable business owner, set once
+// at creation; `createdByUserId` is the author, which may be a
+// different person (e.g. a company employee entering a client that
+// belongs to the company workspace). A ClientRecord is NOT a platform
+// user account (`AccountType.CLIENT`) — most CRM clients never register
+// at all. `platformUserId` is a nullable, unenforced scalar reserved for
+// a future linking feature; Milestone 4 does not build any linking flow.
+// See docs/PRODUCT.md "CRM client vs. platform client."
+//
+// Matching (requirement -> candidate properties) is deliberately NOT a
+// stored table — see apps/api/src/clients/matching.service.ts. Property
+// prices/status/features can change after the fact, so matches are
+// always computed fresh from current data; nothing here would be a
+// meaningful "match record" to keep in sync.
+// ---------------------------------------------------------------------------
+
+enum ClientRecordStatus {
+  LEAD
+  ACTIVE
+  QUALIFIED
+  VIEWING
+  NEGOTIATING
+  WON
+  LOST
+  INACTIVE
+  ARCHIVED
+}
+
+enum ClientSource {
+  REFERRAL
+  WHATSAPP
+  INSTAGRAM
+  FACEBOOK
+  WEBSITE
+  PHONE
+  WALK_IN
+  PROPERTY_INQUIRY
+  OTHER
+}
+
+enum PreferredContactMethod {
+  PHONE
+  WHATSAPP
+  EMAIL
+  OTHER
+}
+
+enum ClientRequirementStatus {
+  ACTIVE
+  PAUSED
+  FULFILLED
+  ARCHIVED
+}
+
+enum PresentationStatus {
+  DRAFT
+  GENERATED
+  ARCHIVED
+}
+
+model ClientRecord {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdByUserId String @db.Uuid
+  createdBy       User   @relation("ClientRecordCreatedBy", fields: [createdByUserId], references: [id])
+
+  /// Plain scalar actor/assignment references (see User's moderation
+  /// fields for the established rationale — no Prisma relation, no
+  /// hand-added FK either, matching Property.archivedByUserId's exact
+  /// precedent). An assignment target is re-verified (same workspace,
+  /// ACTIVE membership) at write time in ClientsService, never trusted
+  /// from a stale reference alone — assigning never grants additional
+  /// workspace permissions by itself.
+  assignedToUserId String? @db.Uuid
+  /// Reserved for a future platform-account linking feature — not
+  /// enforced, not surfaced by any endpoint yet.
+  platformUserId   String? @db.Uuid
+
+  firstName     String
+  lastName      String
+  phone         String
+  whatsappPhone String?
+  email         String?
+
+  preferredContactMethod PreferredContactMethod?
+  source                 ClientSource?
+  status                 ClientRecordStatus      @default(LEAD)
+  notes                  String?
+
+  archivedAt       DateTime?
+  archivedByUserId String?   @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requirements  ClientRequirement[]
+  shortlist     ClientPropertyShortlist[]
+  presentations PropertyPresentation[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@index([assignedToUserId])
+  @@index([createdByUserId])
+  @@index([phone])
+  @@index([email])
+  @@map("client_records")
+}
+
+/// A client may have multiple requirements over time (e.g. an apartment
+/// to buy AND land to invest in) — never restricted to one. Hard
+/// (must-have) criteria are the typed min/max/enum/array columns below,
+/// evaluated by MatchingService as candidate-excluding filters; soft
+/// (nice-to-have) criteria are `preferredFeatures` only, which raise a
+/// match's score but never exclude a property. See
+/// apps/api/src/clients/matching.service.ts for exactly how each field
+/// is used. Every array field defaults to empty, meaning "no constraint
+/// on this dimension" — e.g. an empty `cities` accepts any city.
+model ClientRequirement {
+  id       String       @id @default(uuid()) @db.Uuid
+  clientId String       @db.Uuid
+  client   ClientRecord @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  /// Denormalized from the parent client at creation, immutable —
+  /// enables workspace-scoped queries directly on this table without a
+  /// join. Re-validated against the parent client's own workspaceId on
+  /// every write in ClientRequirementsService, so a requirement can
+  /// never end up attached to a client from a different workspace.
+  workspaceId     String @db.Uuid
+  createdByUserId String @db.Uuid
+
+  title          String
+  listingPurpose ListingPurpose
+  propertyTypes  PropertyType[]
+
+  minPrice Decimal? @db.Decimal(14, 2)
+  maxPrice Decimal? @db.Decimal(14, 2)
+  /// Required (validated at the DTO layer) whenever minPrice or maxPrice
+  /// is set — see docs/PERMISSIONS.md "Matching currency rule": prices
+  /// are never compared across currencies.
+  currency String?  @db.Char(3)
+
+  minBedrooms  Int?
+  maxBedrooms  Int?
+  minBathrooms Int?
+  minAreaSqm   Decimal? @db.Decimal(10, 2)
+  maxAreaSqm   Decimal? @db.Decimal(10, 2)
+
+  countries String[]
+  cities    String[]
+  areas     String[]
+
+  /// Feature keys drawn from the identical
+  /// apps/api/src/properties/property-features.catalog.ts vocabulary a
+  /// Property's own features use — never a second, incompatible
+  /// amenity list.
+  requiredFeatures  String[]
+  preferredFeatures String[]
+
+  notes  String?
+  status ClientRequirementStatus @default(ACTIVE)
+
+  archivedAt       DateTime?
+  archivedByUserId String?   @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shortlist     ClientPropertyShortlist[]
+  presentations PropertyPresentation[]
+
+  @@index([clientId])
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@map("client_requirements")
+}
+
+/// A property saved/shortlisted for a client, optionally tied to the
+/// requirement that motivated it. `@@unique([clientId, propertyId])`
+/// prevents the same property being shortlisted twice for the same
+/// client at the database level, not just in application code.
+model ClientPropertyShortlist {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Denormalized from `client.workspaceId` at creation, immutable — see
+  /// ClientRequirement.workspaceId for the identical rationale.
+  workspaceId String @db.Uuid
+
+  clientId String       @db.Uuid
+  client   ClientRecord @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  requirementId String?            @db.Uuid
+  requirement   ClientRequirement? @relation(fields: [requirementId], references: [id], onDelete: SetNull)
+
+  propertyId String   @db.Uuid
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  addedByUserId String  @db.Uuid
+  note          String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([clientId, propertyId])
+  @@index([workspaceId])
+  @@index([requirementId])
+  @@index([propertyId])
+  @@map("client_property_shortlists")
+}
+
+/// A client-facing selection of properties turned into a PDF. `clientId`
+/// / `requirementId` are optional (an ad-hoc presentation need not be
+/// tied to either), but every `PropertyPresentationItem.propertyId` is
+/// verified against `workspaceId` at write time regardless — see
+/// docs/PERMISSIONS.md "Presentation authorization."
+///
+/// Versioning: `storageKey`/`generatedAt` always point at the MOST
+/// RECENTLY generated PDF. Pressing "Generate" again writes a brand new
+/// object under a new key (see PresentationsService) and repoints these
+/// two fields — it never overwrites the previous artifact in place, and
+/// the previous artifact is left in storage (not deleted, not
+/// referenced anywhere once superseded). Editing title/items/notes on a
+/// GENERATED presentation moves its status back to DRAFT without
+/// touching the still-valid, still-accessible previously generated
+/// artifact until an explicit regeneration.
+model PropertyPresentation {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  clientId String?       @db.Uuid
+  client   ClientRecord? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  requirementId String?            @db.Uuid
+  requirement   ClientRequirement? @relation(fields: [requirementId], references: [id], onDelete: SetNull)
+
+  createdByUserId String @db.Uuid
+  createdBy       User   @relation("PresentationCreatedBy", fields: [createdByUserId], references: [id])
+
+  title  String
+  status PresentationStatus @default(DRAFT)
+
+  generatedAt DateTime?
+  storageKey  String?
+
+  archivedAt       DateTime?
+  archivedByUserId String?   @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items PropertyPresentationItem[]
+
+  @@index([workspaceId])
+  @@index([clientId])
+  @@index([requirementId])
+  @@index([status])
+  @@index([workspaceId, createdAt])
+  @@map("property_presentations")
+}
+
+/// The properties selected for one presentation, in send order. No
+/// per-item snapshot fields — the generated PDF binary itself (stored
+/// via StorageService, see PropertyPresentation.storageKey) is the
+/// historical record of exactly what was sent; regenerating always
+/// reads current property data, by design (see docs/DATABASE.md
+/// "Presentation snapshot strategy").
+model PropertyPresentationItem {
+  id             String               @id @default(uuid()) @db.Uuid
+  presentationId String               @db.Uuid
+  presentation   PropertyPresentation @relation(fields: [presentationId], references: [id], onDelete: Cascade)
+
+  propertyId String   @db.Uuid
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  sortOrder Int
+  agentNote String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([presentationId, propertyId])
+  @@index([presentationId])
+  @@index([propertyId])
+  @@map("property_presentation_items")
 }

@@ -256,6 +256,16 @@ Authorization (Milestone 2+) remains a forward statement.
   `property.private_notes_accessed`, `property.exact_location_accessed`
   (logged only when that section was actually present AND actually
   included in the response — i.e. the caller held the permission).
+  Milestone 4 adds: `client.created`, `client.updated`, `client.assigned`,
+  `client.archived`, `client.restored`, `client.requirement_created`,
+  `client.requirement_updated`, `client.requirement_archived`,
+  `client.property_shortlisted`, `client.property_removed_from_shortlist`,
+  `presentation.created`, `presentation.updated`, `presentation.generated`,
+  `presentation.archived`, `presentation.accessed` (logged every time the
+  signed PDF URL is issued, not just on generation). Never logs full
+  client contact details or presentation content — only ids and
+  non-secret structured context, same discipline as every prior
+  milestone.
 - Never logged: passwords, access tokens, refresh tokens, OTP codes,
   reset tokens, full payment credentials. `AuditLog.metadata` is only
   ever given non-secret structured context (e.g. `{ accountType }`,

@@ -32,6 +32,11 @@ export interface WorkspaceSummary {
   roleKey: string | null;
 }
 
+/** `GET /workspaces/:id` — the one workspace endpoint that also returns the caller's resolved permission set. */
+export interface WorkspaceDetail extends WorkspaceSummary {
+  permissions: string[];
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   meta: { page: number; pageSize: number; totalItems: number; totalPages: number };
@@ -122,4 +127,173 @@ export interface PropertyDetail extends PropertyListItem {
   location?: PropertyLocation;
   owners?: PropertyOwnerDetail[];
   privateDetails?: PropertyPrivateDetail;
+}
+
+// ---------------------------------------------------------------------------
+// Milestone 4 — Client CRM, requirements, matching, shortlist, presentations
+// ---------------------------------------------------------------------------
+
+export type ClientRecordStatus =
+  | 'LEAD'
+  | 'ACTIVE'
+  | 'QUALIFIED'
+  | 'VIEWING'
+  | 'NEGOTIATING'
+  | 'WON'
+  | 'LOST'
+  | 'INACTIVE'
+  | 'ARCHIVED';
+
+export type ClientSource =
+  | 'REFERRAL'
+  | 'WHATSAPP'
+  | 'INSTAGRAM'
+  | 'FACEBOOK'
+  | 'WEBSITE'
+  | 'PHONE'
+  | 'WALK_IN'
+  | 'PROPERTY_INQUIRY'
+  | 'OTHER';
+
+export type PreferredContactMethod = 'PHONE' | 'WHATSAPP' | 'EMAIL' | 'OTHER';
+
+export interface ClientListItem {
+  id: string;
+  workspaceId: string;
+  createdByUserId: string;
+  assignedToUserId: string | null;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  whatsappPhone: string | null;
+  email: string | null;
+  preferredContactMethod: PreferredContactMethod | null;
+  source: ClientSource | null;
+  status: ClientRecordStatus;
+  activeRequirementCount: number;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
+}
+
+export type ClientRequirementStatus = 'ACTIVE' | 'PAUSED' | 'FULFILLED' | 'ARCHIVED';
+
+export interface ClientRequirementDetail {
+  id: string;
+  clientId: string;
+  workspaceId: string;
+  createdByUserId: string;
+  title: string;
+  listingPurpose: ListingPurpose;
+  propertyTypes: string[];
+  minPrice: number | null;
+  maxPrice: number | null;
+  currency: string | null;
+  minBedrooms: number | null;
+  maxBedrooms: number | null;
+  minBathrooms: number | null;
+  minAreaSqm: number | null;
+  maxAreaSqm: number | null;
+  countries: string[];
+  cities: string[];
+  areas: string[];
+  requiredFeatures: string[];
+  preferredFeatures: string[];
+  notes: string | null;
+  status: ClientRequirementStatus;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
+}
+
+export interface ClientPropertyShortlistItem {
+  id: string;
+  workspaceId: string;
+  clientId: string;
+  requirementId: string | null;
+  propertyId: string;
+  addedByUserId: string;
+  note: string | null;
+  createdAt: string;
+  property: {
+    id: string;
+    title: string;
+    propertyType: PropertyType;
+    listingPurpose: ListingPurpose;
+    price: number;
+    currency: string;
+    bedrooms: number | null;
+    bathrooms: number | null;
+    areaSqm: number | null;
+    city: string | null;
+    area: string | null;
+    propertyStatus: PropertyBusinessStatus;
+  };
+}
+
+export interface ClientDetail extends ClientListItem {
+  notes: string | null;
+  requirements: ClientRequirementDetail[];
+  shortlist: ClientPropertyShortlistItem[];
+  presentationCount: number;
+}
+
+/** A property summary shape with no owner/commission/private-notes/exact-coordinate fields at all — used by matching and presentations. */
+export interface PresentationSafePropertySnapshot {
+  id: string;
+  title: string;
+  description: string | null;
+  propertyType: string;
+  listingPurpose: ListingPurpose;
+  price: number;
+  currency: string;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  areaSqm: number | null;
+  propertyStatus: string;
+  city: string | null;
+  area: string | null;
+  country: string | null;
+  featureKeys: string[];
+  primaryImageUrl: string | null;
+}
+
+export interface MatchExplanation {
+  matchedCriteria: string[];
+  missingPreferredCriteria: string[];
+}
+
+export interface PropertyMatchResult {
+  property: PresentationSafePropertySnapshot;
+  score: number;
+  explanation: MatchExplanation;
+}
+
+export type PresentationStatus = 'DRAFT' | 'GENERATED' | 'ARCHIVED';
+
+export interface PropertyPresentationItemDetail {
+  id: string;
+  propertyId: string;
+  sortOrder: number;
+  agentNote: string | null;
+  property: PresentationSafePropertySnapshot;
+}
+
+export interface PropertyPresentationSummary {
+  id: string;
+  workspaceId: string;
+  clientId: string | null;
+  requirementId: string | null;
+  createdByUserId: string;
+  title: string;
+  status: PresentationStatus;
+  itemCount: number;
+  generatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
+}
+
+export interface PropertyPresentationDetail extends PropertyPresentationSummary {
+  items: PropertyPresentationItemDetail[];
 }

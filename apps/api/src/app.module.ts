@@ -12,6 +12,8 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
 import { AdminModule } from './admin/admin.module';
 import { StorageModule } from './storage/storage.module';
 import { PropertiesModule } from './properties/properties.module';
+import { ClientsModule } from './clients/clients.module';
+import { PresentationsModule } from './presentations/presentations.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -40,6 +42,8 @@ import { AppService } from './app.service';
     AdminModule,
     StorageModule,
     PropertiesModule,
+    ClientsModule,
+    PresentationsModule,
   ],
   controllers: [AppController],
   providers: [

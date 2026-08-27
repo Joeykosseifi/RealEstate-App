@@ -17,6 +17,14 @@ export interface StorageService {
   /** A short-lived URL that grants read access to `key` without exposing a permanent public URL. */
   getSignedAccessUrl(key: string): Promise<string>;
 
+  /**
+   * Reads the object's raw bytes server-side — used by
+   * PdfGeneratorService to embed property images directly into a
+   * generated PDF (any real object-storage provider supports an
+   * equivalent GetObject call; this is not local-disk-specific).
+   */
+  readObject(key: string): Promise<Buffer>;
+
   /** Idempotent — deleting an already-missing key is not an error. */
   deleteObject(key: string): Promise<void>;
 }

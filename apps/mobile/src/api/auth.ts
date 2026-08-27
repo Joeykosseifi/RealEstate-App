@@ -1,5 +1,5 @@
 import { apiRequest } from './client';
-import type { AuthTokens, AuthUser, WorkspaceSummary } from './types';
+import type { AuthTokens, AuthUser, WorkspaceDetail, WorkspaceSummary } from './types';
 
 export function login(
   email: string,
@@ -14,4 +14,9 @@ export function getCurrentUser(): Promise<AuthUser> {
 
 export function listWorkspaces(): Promise<WorkspaceSummary[]> {
   return apiRequest('/workspaces');
+}
+
+/** The one workspace endpoint that also resolves the caller's permission set — used to drive permission-gated UI (e.g. hiding "Archive" without `client.archive`). */
+export function getWorkspaceDetail(workspaceId: string): Promise<WorkspaceDetail> {
+  return apiRequest(`/workspaces/${workspaceId}`);
 }

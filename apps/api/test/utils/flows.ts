@@ -221,3 +221,99 @@ export async function createProperty(
     .expect(201);
   return response.body as CreatedProperty;
 }
+
+/** An agent's automatically-created personal workspace id (see auth-workspace.e2e-spec.ts). */
+export async function getPersonalWorkspaceId(
+  testApp: TestApp,
+  userId: string,
+): Promise<string> {
+  const workspace = await testApp.prisma.workspace.findFirstOrThrow({
+    where: { personalOwnerUserId: userId },
+  });
+  return workspace.id;
+}
+
+/** Minimal valid CRM client payload for tests — override any field. */
+export function minimalClientPayload(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    firstName: 'Jane',
+    lastName: 'Doe',
+    phone: '+96170000000',
+    ...overrides,
+  };
+}
+
+export interface CreatedClient {
+  id: string;
+  [key: string]: unknown;
+}
+
+/** Creates a CRM client via the real HTTP API and returns the created client-list-item response body. */
+export async function createClient(
+  testApp: TestApp,
+  workspaceId: string,
+  accessToken: string,
+  overrides: Record<string, unknown> = {},
+): Promise<CreatedClient> {
+  const response = await request(testApp.app.getHttpServer())
+    .post(`/api/v1/workspaces/${workspaceId}/clients`)
+    .set(...authHeader(accessToken))
+    .send(minimalClientPayload(overrides))
+    .expect(201);
+  return response.body as CreatedClient;
+}
+
+/** Minimal valid client-requirement payload for tests — override any field. */
+export function minimalRequirementPayload(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    title: 'Apartment search',
+    listingPurpose: 'SALE',
+    ...overrides,
+  };
+}
+
+export interface CreatedRequirement {
+  id: string;
+  [key: string]: unknown;
+}
+
+/** Creates a client requirement via the real HTTP API. */
+export async function createClientRequirement(
+  testApp: TestApp,
+  workspaceId: string,
+  clientId: string,
+  accessToken: string,
+  overrides: Record<string, unknown> = {},
+): Promise<CreatedRequirement> {
+  const response = await request(testApp.app.getHttpServer())
+    .post(`/api/v1/workspaces/${workspaceId}/clients/${clientId}/requirements`)
+    .set(...authHeader(accessToken))
+    .send(minimalRequirementPayload(overrides))
+    .expect(201);
+  return response.body as CreatedRequirement;
+}
+
+export interface CreatedPresentation {
+  id: string;
+  [key: string]: unknown;
+}
+
+/** Creates a PDF presentation via the real HTTP API. */
+export async function createPresentation(
+  testApp: TestApp,
+  workspaceId: string,
+  accessToken: string,
+  items: { propertyId: string; agentNote?: string }[],
+  overrides: Record<string, unknown> = {},
+): Promise<CreatedPresentation> {
+  const response = await request(testApp.app.getHttpServer())
+    .post(`/api/v1/workspaces/${workspaceId}/presentations`)
+    .set(...authHeader(accessToken))
+    .send({ title: 'Properties for You', items, ...overrides })
+    .expect(201);
+  return response.body as CreatedPresentation;
+}

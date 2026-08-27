@@ -94,9 +94,10 @@ proposition" above, implemented:
 
 `apps/mobile` now has its first real screens beyond the Expo starter:
 sign-in, a bottom-tab shell (Home / Properties / Clients / Inbox / More
-— only Properties has business logic this milestone, the rest are
-labeled placeholders, not dead buttons), and three Properties screens
-(list with search/status filters, add, detail). The "Add Property" form
+— Properties and, as of Milestone 4, Clients have business logic; Home
+and Inbox remain labeled placeholders, not dead buttons), and three
+Properties screens (list with search/status filters, add, detail). The
+"Add Property" form
 is a single scrollable form covering every field the product spec's
 step list calls for (type/purpose, basics, price, rooms/area, features,
 location, owner, private notes) rather than a literal multi-screen
@@ -109,6 +110,46 @@ same picker, pre-filled with the saved pin, is reachable from an
 existing property's detail screen via "Edit Location" — see
 `docs/API.md` "Google Maps setup" for the required API keys and Google
 Cloud APIs.
+
+### Client CRM, matching & presentations (Milestone 4)
+
+Milestone 4 turns the private property database into the daily
+agent workflow the product is built around: a client contacts an
+agent ("I need a 3-bedroom apartment in Jounieh, around $180,000, with
+parking"), the agent saves the client and that requirement, instantly
+sees ranked matching properties from their own authorized inventory,
+selects the ones worth sharing, and generates a professional PDF to
+send.
+
+- **`ClientRecord`** — a professional's own customer, not a platform
+  account. Belongs to a workspace (company employee's clients belong to
+  the company, not their personal workspace) with a practical CRM
+  lifecycle (`LEAD` → `ACTIVE`/`QUALIFIED`/`VIEWING`/`NEGOTIATING` →
+  `WON`/`LOST`/`INACTIVE`), a source (referral/WhatsApp/Instagram/
+  walk-in/etc.), and optional assignment to a workspace member.
+- **`ClientRequirement`** — a client may have any number of saved
+  searches at once (an apartment to buy AND land to invest in). Each
+  one clearly separates **Must Have** (hard) criteria — budget,
+  bedrooms/bathrooms, area, accepted locations, required features, all
+  of which exclude a property when unmet — from **Preferred** (soft)
+  criteria, which only raise a match's score.
+- **Matching** is computed fresh on every request from the workspace's
+  own current property data (never a stale stored result), returns a
+  transparent 0-100 score, and explains exactly which criteria matched
+  and which preferred ones didn't — no generative/AI-invented
+  explanations.
+- **Shortlist** — saving matched (or manually browsed) properties for a
+  client, ready to turn into a presentation.
+- **Presentations** — the agent selects shortlisted properties, orders
+  them, adds an optional client-facing note per property, and generates
+  a branded PDF built exclusively from safe, non-sensitive property
+  data (never owner contacts, commission, private notes, or exact
+  coordinates). The PDF is shared through the device's native share
+  sheet (WhatsApp/email/etc.) — no in-app messaging yet.
+
+See docs/API.md "Client CRM, matching & presentation endpoints" and
+docs/PERMISSIONS.md "Matching architecture" / "Presentation
+authorization" for the full technical detail.
 
 ## Build order
 

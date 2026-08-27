@@ -158,6 +158,82 @@ reappearing as `AVAILABLE`. An archived property also can't be edited or
 have its status changed through the ordinary endpoints (`409`) until
 it's restored.
 
+## Client archive/restore (Milestone 4)
+
+The identical reversible pattern as property archive/restore, applied to
+`ClientRecord`: `client.archive` gates both `POST .../clients/:id/archive`
+(preserving the row and every requirement/shortlist/presentation
+relationship untouched) and its inverse, `POST .../clients/:id/restore` —
+no separate "restore" permission. Restore always lands on `INACTIVE`,
+never the client's prior status, mirroring `Property.restore()`'s
+fixed-default convention exactly: an agent consciously reactivates a
+restored client's lifecycle rather than it silently reappearing as
+`LEAD`/`ACTIVE`. An archived client also can't be edited or reassigned
+through the ordinary endpoints (`409`) until it's restored.
+
+## Client assignment (Milestone 4)
+
+Assigning a `ClientRecord` to a workspace member (`POST
+.../clients/:id/assign`, `client.assign`) never grants that member
+additional workspace permissions — it only sets `assignedToUserId`,
+purely a working-relationship marker consulted by client filtering. The
+assignment target is re-verified server-side on every call: it must be
+an **ACTIVE** member of the **same workspace** the client belongs to
+(`409` otherwise) — a suspended or removed member, or a user from a
+different workspace entirely, can never receive an assignment, even if
+they held a stale valid id. Optionally assigning a client at creation
+time (`CreateClientDto.assignedToUserId`) requires `client.assign` in
+addition to `client.create` — the same "write requires the same
+permission as the action it performs" principle used for property
+owner/private-notes writes.
+
+## Matching architecture (Milestone 4)
+
+Property matching (`GET .../clients/:clientId/requirements/:requirementId/matches`)
+requires **both** `client.view` and `property.view` — the guard checks
+`client.view` (the route is nested under a client), and
+`MatchingService.findMatches` explicitly checks `property.view` itself,
+since `@RequireWorkspacePermission` only ever checks one permission.
+Authorization is enforced **before** any property is read: the
+candidate SQL query is scoped to `workspaceId` from the start, so an
+unauthorized or another-workspace's property is never fetched, scored,
+or filtered out after the fact. For Milestone 4, matching only
+considers properties the ACTIVE workspace itself owns — cross-workspace
+or freelance-collaboration inventory is a later milestone.
+
+Only `AVAILABLE` properties are automatically matched — `SOLD`,
+`RENTED`, and `ARCHIVED` are always excluded, and `RESERVED`/
+`OFF_MARKET` are also excluded by the same default (a documented
+choice: a requirement's whole point is finding something the client can
+actually pursue right now). See docs/DATABASE.md "Design decisions
+worth knowing (Milestone 4)" for the hard/soft criteria split, the
+match-score formula, the currency rule, and the OR-combined location
+matching.
+
+Match results use `PresentationSafePropertySnapshot` — a fixed-shape
+DTO with no owner/commission/private-notes/exact-coordinate fields at
+all, structurally, not just by convention (see `property.mapper.ts`
+`toPresentationSafeSnapshot`). This is the same safe-snapshot type PDF
+presentation generation uses.
+
+## Presentation authorization (Milestone 4)
+
+Every presentation endpoint (`workspaces/:id/presentations/...`)
+requires a single permission, `property.create_presentation` — create,
+list, view, edit, generate, and access the generated PDF all gate on
+it, per the "prefer the existing permission catalog" principle; there
+is no separate `property.view_presentation`. Every
+`clientId`/`requirementId`/`propertyId` in the request body is
+independently re-verified against the caller's `workspaceId` inside
+`PresentationsService` — a property or client from another workspace
+can never enter a presentation, regardless of what the client-side
+selection UI shows. Accessing the generated PDF itself works exactly
+like private property media: `GET .../presentations/:id/access-url`
+returns a short-lived HMAC-signed URL to the same `GET
+/storage/access` endpoint property media already uses (see
+docs/DATABASE.md "Property media storage") — never a permanent public
+path.
+
 ## Google Maps strategy (Milestone 3)
 
 - The saved `latitude`/`longitude` (`PropertyLocation`, `Decimal(9,6)`)
@@ -276,7 +352,7 @@ typo is a compile error. It is grouped by domain:
 | Workspace | WORKSPACE | `workspace.view`, `workspace.manage_roles`, `workspace.view_audit` |
 | Team | WORKSPACE | `team.view`, `team.invite`, `team.suspend`, `team.remove`, `team.assign_role` |
 | Property (foundation only — enforced from Milestone 3) | WORKSPACE | `property.view`, `property.create`, `property.view_exact_location`, ... |
-| Client CRM (foundation only — enforced from Milestone 4) | WORKSPACE | `client.view`, `client.create`, `client.assign`, ... |
+| Client CRM (enforced starting Milestone 4) | WORKSPACE | `client.view`, `client.create`, `client.edit`, `client.assign`, `client.archive` |
 | Collaboration (foundation only — enforced from Milestone 9) | WORKSPACE | `collaboration.view`, `collaboration.manage`, ... |
 | Admin / platform | PLATFORM | `admin.users.view`, `admin.users.view_email`, `admin.users.suspend`, `admin.roles.manage`, ... |
 
@@ -457,7 +533,7 @@ standalone script, `apps/api/scripts/bootstrap-super-admin.ts` (run via
 (registered through the normal flow), and idempotently grants the role,
 writing an audit log entry with `actorUserId: null` (system action).
 
-## Status (Milestone 3)
+## Status (Milestone 4)
 
 Implemented through Milestone 2: workspace isolation and switching,
 membership lifecycle (invite → accept → suspend/remove/role-change),
@@ -477,6 +553,19 @@ each omitted rather than masked when unauthorized), the flexible
 feature/amenity catalog, private-media storage via a signed-URL
 provider abstraction, and the first mobile screens (sign-in, bottom-tab
 shell, Properties list/add/detail).
+
+Milestone 4 adds: the full client CRM (`client.view`/`create`/`edit`/
+`assign`/`archive`, now actually enforced), assignment with same-
+workspace/ACTIVE-membership re-verification, per-client requirements
+with an explicit hard/soft criteria split, the on-demand matching
+engine (workspace-scoped candidate query, deterministic scoring,
+non-generative explanations), the property shortlist relationship
+(database-enforced no-duplicates), PDF client presentations
+(`property.create_presentation`, every selected entity re-verified
+against the caller's workspace, presentation-safe DTOs that
+structurally cannot carry sensitive property data), and the mobile
+Clients tab (client list/detail/add, requirement form, match results,
+shortlist, presentation create/view/share).
 
 Not yet built: CRM, matching, messaging, viewings, publication/public
 marketplace, collaboration, commission agreements, subscriptions,

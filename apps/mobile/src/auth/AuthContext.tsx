@@ -1,6 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { PropsWithChildren } from 'react';
-import { getCurrentUser, listWorkspaces, login as loginRequest } from '../api/auth';
+import {
+  getCurrentUser,
+  getWorkspaceDetail,
+  listWorkspaces,
+  login as loginRequest,
+} from '../api/auth';
 import { clearTokens, getStoredAccessToken, storeTokens } from '../api/client';
 import type { AuthUser, WorkspaceSummary } from '../api/types';
 
@@ -8,8 +13,10 @@ interface AuthState {
   status: 'loading' | 'signed-out' | 'signed-in';
   user: AuthUser | null;
   workspaces: WorkspaceSummary[];
-  /** The workspace the Properties screens act in — the agent's own personal workspace, or the first company workspace they belong to. */
+  /** The workspace the Properties/Clients screens act in — the agent's own personal workspace, or the first company workspace they belong to. */
   currentWorkspace: WorkspaceSummary | null;
+  /** The caller's resolved permission set for `currentWorkspace` — drives permission-gated UI (e.g. hiding "Archive" without `client.archive`). Empty until resolved. */
+  permissions: Set<string>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   selectWorkspace: (workspace: WorkspaceSummary) => void;
@@ -22,6 +29,7 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
   const [user, setUser] = useState<AuthUser | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [currentWorkspace, setCurrentWorkspace] = useState<WorkspaceSummary | null>(null);
+  const [permissions, setPermissions] = useState<Set<string>>(new Set());
 
   const loadSession = useCallback(async () => {
     const token = await getStoredAccessToken();
@@ -48,6 +56,31 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
     void loadSession();
   }, [loadSession]);
 
+  // Re-resolves permissions whenever the acting workspace changes —
+  // never trusted from `roleKey` alone client-side, mirroring the
+  // backend's own permission-Set-based authorization model.
+  useEffect(() => {
+    if (!currentWorkspace) {
+      setPermissions(new Set());
+      return;
+    }
+    let cancelled = false;
+    getWorkspaceDetail(currentWorkspace.id)
+      .then((detail) => {
+        if (!cancelled) {
+          setPermissions(new Set(detail.permissions));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPermissions(new Set());
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentWorkspace]);
+
   const login = useCallback(async (email: string, password: string) => {
     const { tokens } = await loginRequest(email, password);
     await storeTokens(tokens.accessToken, tokens.refreshToken);
@@ -63,6 +96,7 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
     setUser(null);
     setWorkspaces([]);
     setCurrentWorkspace(null);
+    setPermissions(new Set());
     setStatus('signed-out');
   }, []);
 
@@ -72,11 +106,12 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
       user,
       workspaces,
       currentWorkspace,
+      permissions,
       login,
       logout,
       selectWorkspace: setCurrentWorkspace,
     }),
-    [status, user, workspaces, currentWorkspace, login, logout],
+    [status, user, workspaces, currentWorkspace, permissions, login, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

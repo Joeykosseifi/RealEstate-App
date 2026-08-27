@@ -107,3 +107,18 @@ export function buildPropertyMediaStorageKey(
     .slice(0, 8);
   return `properties/${propertyId}/${mediaId}-${safeSuffix}`;
 }
+
+/**
+ * One key per generated PDF, keyed by generation timestamp — pressing
+ * "Generate" again produces a brand new key (and therefore a brand new
+ * object), never overwrites the previous one in place. See
+ * `PropertyPresentation`'s versioning doc comment in schema.prisma and
+ * `PresentationsService.generate`.
+ */
+export function buildPresentationStorageKey(
+  workspaceId: string,
+  presentationId: string,
+  generatedAt: Date,
+): string {
+  return `presentations/${workspaceId}/${presentationId}/${generatedAt.getTime()}.pdf`;
+}
