@@ -46,7 +46,9 @@ async function main(): Promise<void> {
     where: { key: SUPER_ADMIN_ROLE_KEY, scope: 'PLATFORM' },
   });
   if (!role) {
-    throw new Error('SUPER_ADMIN role is not seeded. Run `npm run prisma:seed` first.');
+    throw new Error(
+      'SUPER_ADMIN role is not seeded. Run `npm run prisma:seed` first.',
+    );
   }
 
   const existingGrant = await prisma.userPlatformRole.findFirst({

@@ -53,12 +53,7 @@ export type PropertyType =
 export type ListingPurpose = 'SALE' | 'RENT';
 
 export type PropertyBusinessStatus =
-  | 'AVAILABLE'
-  | 'RESERVED'
-  | 'SOLD'
-  | 'RENTED'
-  | 'OFF_MARKET'
-  | 'ARCHIVED';
+  'AVAILABLE' | 'RESERVED' | 'SOLD' | 'RENTED' | 'OFF_MARKET' | 'ARCHIVED';
 
 export interface PropertyMediaSummary {
   id: string;

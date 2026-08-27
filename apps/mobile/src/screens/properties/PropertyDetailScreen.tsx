@@ -11,8 +11,20 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../auth/AuthContext';
-import { archiveProperty, getMediaAccessUrl, getProperty } from '../../api/properties';
+import {
+  archiveProperty,
+  getMediaAccessUrl,
+  getProperty,
+  updatePropertyLocation,
+} from '../../api/properties';
+import { ApiError } from '../../api/client';
 import type { PropertyDetail } from '../../api/types';
+import { MapLocationPicker } from '../../location/MapLocationPicker';
+import {
+  initialDraftFromSavedLocation,
+  toLocationDto,
+  type LocationDraft,
+} from '../../location/locationPayload';
 import type { PropertiesStackParamList } from '../../navigation/PropertiesStack';
 
 type Props = NativeStackScreenProps<PropertiesStackParamList, 'PropertyDetail'>;
@@ -33,6 +45,8 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
   const [primaryImageUrl, setPrimaryImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mapVisible, setMapVisible] = useState(false);
+  const [savingLocation, setSavingLocation] = useState(false);
 
   const load = useCallback(async () => {
     if (!currentWorkspace) return;
@@ -41,7 +55,11 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
       const detail = await getProperty(currentWorkspace.id, propertyId);
       setProperty(detail);
       if (detail.primaryMedia) {
-        const { url } = await getMediaAccessUrl(currentWorkspace.id, propertyId, detail.primaryMedia.id);
+        const { url } = await getMediaAccessUrl(
+          currentWorkspace.id,
+          propertyId,
+          detail.primaryMedia.id,
+        );
         setPrimaryImageUrl(url);
       }
     } catch {
@@ -54,6 +72,27 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
   useEffect(() => {
     void load();
   }, [load]);
+
+  const onSaveLocation = async (draft: LocationDraft) => {
+    if (!currentWorkspace) return;
+    setSavingLocation(true);
+    try {
+      const updated = await updatePropertyLocation(
+        currentWorkspace.id,
+        propertyId,
+        toLocationDto(draft),
+      );
+      setProperty(updated);
+      setMapVisible(false);
+    } catch (err) {
+      Alert.alert(
+        'Could not save location',
+        err instanceof ApiError ? err.message : 'Please try again.',
+      );
+    } finally {
+      setSavingLocation(false);
+    }
+  };
 
   const onArchive = () => {
     if (!currentWorkspace) return;
@@ -104,7 +143,9 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
         <Row label="Bedrooms" value={property.bedrooms?.toString() ?? '—'} />
         <Row label="Bathrooms" value={property.bathrooms?.toString() ?? '—'} />
         <Row label="Area" value={property.areaSqm ? `${property.areaSqm} sqm` : '—'} />
-        {property.description ? <Text style={styles.description}>{property.description}</Text> : null}
+        {property.description ? (
+          <Text style={styles.description}>{property.description}</Text>
+        ) : null}
       </View>
 
       {property.features.length > 0 && (
@@ -134,7 +175,12 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
             label="Coordinates"
             value={`${property.location.latitude.toFixed(6)}, ${property.location.longitude.toFixed(6)}`}
           />
-          <Text style={styles.hint}>Exact location — private, visible only to authorized professionals.</Text>
+          <Text style={styles.hint}>
+            Exact location — private, visible only to authorized professionals.
+          </Text>
+          <TouchableOpacity style={styles.editLocationButton} onPress={() => setMapVisible(true)}>
+            <Text style={styles.editLocationButtonText}>Edit Location</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -159,7 +205,9 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
           {property.privateDetails.commissionNotes !== undefined && (
             <>
               <Text style={[styles.sectionTitle, styles.commissionTitle]}>Commission</Text>
-              <Text style={styles.description}>{property.privateDetails.commissionNotes ?? '—'}</Text>
+              <Text style={styles.description}>
+                {property.privateDetails.commissionNotes ?? '—'}
+              </Text>
             </>
           )}
         </View>
@@ -168,6 +216,20 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
       <TouchableOpacity style={styles.archiveButton} onPress={onArchive}>
         <Text style={styles.archiveButtonText}>Archive Property</Text>
       </TouchableOpacity>
+
+      {property.location && (
+        <MapLocationPicker
+          visible={mapVisible}
+          initialDraft={initialDraftFromSavedLocation(property.location)}
+          onCancel={() => setMapVisible(false)}
+          onSave={(draft) => void onSaveLocation(draft)}
+        />
+      )}
+      {savingLocation && (
+        <View style={styles.savingOverlay}>
+          <ActivityIndicator color="#fff" />
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -177,14 +239,26 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 48 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   error: { color: '#c0392b' },
-  image: { width: '100%', height: 220, borderRadius: 12, marginBottom: 16, backgroundColor: '#eee' },
+  image: {
+    width: '100%',
+    height: 220,
+    borderRadius: 12,
+    marginBottom: 16,
+    backgroundColor: '#eee',
+  },
   imagePlaceholder: { alignItems: 'center', justifyContent: 'center' },
   imagePlaceholderText: { color: '#999' },
   title: { fontSize: 22, fontWeight: '700' },
   price: { fontSize: 20, fontWeight: '600', color: '#1a73e8', marginTop: 4 },
   status: { color: '#666', marginTop: 4, marginBottom: 16 },
   section: { marginBottom: 20 },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#555', marginBottom: 8, textTransform: 'uppercase' },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#555',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
   commissionTitle: { marginTop: 12 },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   detailLabel: { color: '#888' },
@@ -204,4 +278,23 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   archiveButtonText: { color: '#c0392b', fontWeight: '600' },
+  editLocationButton: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#eef4ff',
+  },
+  editLocationButtonText: { color: '#1a73e8', fontWeight: '600' },
+  savingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

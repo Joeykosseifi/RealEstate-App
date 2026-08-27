@@ -12,11 +12,15 @@
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-native": "0.86.2",
+    "react-native-maps": "^1.29.0",
     "react-native-safe-area-context": "^5.9.1",
     "react-native-screens": "^4.27.0"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/react": "~19.2.2",
+    "jest": "^30.0.0",
+    "ts-jest": "^29.2.5",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -24,7 +28,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "jest"
   },
   "private": true
 }

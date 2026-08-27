@@ -101,11 +101,14 @@ is a single scrollable form covering every field the product spec's
 step list calls for (type/purpose, basics, price, rooms/area, features,
 location, owner, private notes) rather than a literal multi-screen
 wizard — a deliberate simplification, not a missing feature. Location
-entry is manual lat/lng plus an explicit "Use current location" button
-(the only moment the app requests location permission); a full
-interactive map/search picker is the documented follow-up once
-`react-native-maps` and a Google Maps API key are wired in — see
-`docs/API.md` "Google Maps setup" for exactly what that involves.
+entry is a full interactive `react-native-maps` picker
+(`apps/mobile/src/location/MapLocationPicker.tsx`): search-and-select,
+tap-to-drop, drag-to-move, and an explicit "Use current location"
+button (the only moment the app requests location permission). The
+same picker, pre-filled with the saved pin, is reachable from an
+existing property's detail screen via "Edit Location" — see
+`docs/API.md` "Google Maps setup" for the required API keys and Google
+Cloud APIs.
 
 ## Build order
 

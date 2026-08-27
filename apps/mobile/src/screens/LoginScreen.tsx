@@ -58,7 +58,11 @@ export function LoginScreen(): React.JSX.Element {
         onPress={onSubmit}
         disabled={submitting}
       >
-        {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
+        {submitting ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Sign In</Text>
+        )}
       </TouchableOpacity>
     </KeyboardAvoidingView>
   );

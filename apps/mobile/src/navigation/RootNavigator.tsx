@@ -15,5 +15,9 @@ export function RootNavigator(): React.JSX.Element {
     );
   }
 
-  return <NavigationContainer>{status === 'signed-in' ? <MainTabs /> : <LoginScreen />}</NavigationContainer>;
+  return (
+    <NavigationContainer>
+      {status === 'signed-in' ? <MainTabs /> : <LoginScreen />}
+    </NavigationContainer>
+  );
 }

@@ -208,21 +208,42 @@ permissioned capability. See docs/DATABASE.md "Property media storage."
 actually reach (a plain `localhost` won't resolve from a physical
 device or most Android emulators; use your machine's LAN IP or a tunnel).
 
-**Google Maps setup (not configured in this environment):** the
-location picker currently uses manual lat/lng entry plus an explicit
-"Use current location" button (`apps/mobile/src/location/useCurrentLocation.ts`).
-To add the full interactive map/search experience described in the
-product spec:
+**Google Maps setup:** the location picker (`apps/mobile/src/location/MapLocationPicker.tsx`)
+is a full interactive `react-native-maps` map: search-and-select,
+tap-to-drop, drag-to-move, and an explicit "Use current location"
+button. It requires a **development build, not Expo Go** — consult
+Expo's current versioned SDK docs for the `react-native-maps` config
+plugin — because the Google Maps API keys are compiled into the native
+project by `apps/mobile/app.config.ts`, not readable at runtime.
 
-1. Install `react-native-maps` and, for search/autocomplete, a Places
-   client library.
-2. Obtain a Google Maps Platform API key (Maps SDK + Places API
-   enabled) and set `GOOGLE_MAPS_API_KEY` (native config) /
-   `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` (client-side calls) in `.env`.
-3. Build a `<MapLocationPicker>` component behind the same interface
-   `useCurrentLocation` already establishes, and swap it into
-   `AddPropertyScreen`'s Location section — no other screen needs to
-   change, since they only ever receive `{ latitude, longitude, ... }`.
+1. `react-native-maps` is already a dependency; no extra install needed.
+2. Obtain a Google Maps Platform API key with **Maps SDK for Android**,
+   **Maps SDK for iOS**, and **Places API** enabled (a separate,
+   more narrowly-scoped key per platform is recommended). Set:
+   - `GOOGLE_MAPS_ANDROID_API_KEY` / `GOOGLE_MAPS_IOS_API_KEY` — read
+     by `app.config.ts` at Expo config time and compiled into the
+     native Android/iOS Maps SDK config. Never exposed to bundled JS.
+   - `EXPO_PUBLIC_GOOGLE_PLACES_API_KEY` — read at runtime by
+     `apps/mobile/src/location/googlePlaces.ts` for search/autocomplete
+     (Places Autocomplete + Place Details HTTP APIs). Being
+     `EXPO_PUBLIC_`-prefixed, it **is** inlined into the JS bundle —
+     restrict it to the Places API only in the Google Cloud console.
+   All three are optional in local dev: with them unset, the map still
+   opens and a pin can still be dropped, dragged, or set from the
+   device's current location and saved — only native tile rendering
+   and search/autocomplete need a real key. Never commit real keys;
+   `.env` is gitignored and `.env.example` only ever holds placeholders.
+3. Rebuild the native app (`expo prebuild` / a new development build)
+   after changing any Maps API key — config-plugin fields are baked in
+   at build time and are not picked up by Fast Refresh.
+
+The picker is shared between adding a property (`AddPropertyScreen`'s
+Location section) and editing one (`PropertyDetailScreen`'s "Edit
+Location" action, via `PATCH .../properties/:propertyId/location`) —
+both hold picker state as a `LocationDraft`
+(`apps/mobile/src/location/locationPayload.ts`) and only ever send a
+wire payload through `toLocationDto`, an explicit allowlist of the
+fields `PropertyLocationDto` accepts.
 
 ## N+1 prevention
 

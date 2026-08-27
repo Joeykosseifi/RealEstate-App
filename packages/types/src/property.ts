@@ -14,20 +14,12 @@ export type PropertyType =
 export type ListingPurpose = 'SALE' | 'RENT';
 
 export type PropertyBusinessStatus =
-  | 'AVAILABLE'
-  | 'RESERVED'
-  | 'SOLD'
-  | 'RENTED'
-  | 'OFF_MARKET'
-  | 'ARCHIVED';
+  'AVAILABLE' | 'RESERVED' | 'SOLD' | 'RENTED' | 'OFF_MARKET' | 'ARCHIVED';
 
 export type PropertyLocationSource = 'GOOGLE_SEARCH' | 'MAP_PIN' | 'CURRENT_LOCATION' | 'MANUAL';
 
 export type PropertyLocationVisibility =
-  | 'PRIVATE'
-  | 'WORKSPACE'
-  | 'PUBLIC_APPROXIMATE'
-  | 'PUBLIC_EXACT';
+  'PRIVATE' | 'WORKSPACE' | 'PUBLIC_APPROXIMATE' | 'PUBLIC_EXACT';
 
 export type PropertyMediaType = 'IMAGE' | 'VIDEO' | 'DOCUMENT';
 

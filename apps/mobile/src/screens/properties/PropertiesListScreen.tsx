@@ -37,7 +37,11 @@ function PropertyRow({ item, onPress }: { item: PropertyListItem; onPress: () =>
         <Text style={styles.rowPrice}>
           {item.currency} {item.price.toLocaleString()}
         </Text>
-        {item.city ? <Text style={styles.rowLocation}>{[item.city, item.area].filter(Boolean).join(', ')}</Text> : null}
+        {item.city ? (
+          <Text style={styles.rowLocation}>
+            {[item.city, item.area].filter(Boolean).join(', ')}
+          </Text>
+        ) : null}
       </View>
     </TouchableOpacity>
   );
@@ -94,7 +98,10 @@ export function PropertiesListScreen({ navigation }: Props): React.JSX.Element {
           onChangeText={setSearch}
           onSubmitEditing={() => void load()}
         />
-        <TouchableOpacity style={styles.addButton} onPress={() => navigation.navigate('AddProperty')}>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => navigation.navigate('AddProperty')}
+        >
           <Text style={styles.addButtonText}>+ Add</Text>
         </TouchableOpacity>
       </View>
@@ -127,7 +134,10 @@ export function PropertiesListScreen({ navigation }: Props): React.JSX.Element {
           keyExtractor={(item) => item.id}
           refreshControl={<RefreshControl refreshing={false} onRefresh={() => void load()} />}
           renderItem={({ item }) => (
-            <PropertyRow item={item} onPress={() => navigation.navigate('PropertyDetail', { propertyId: item.id })} />
+            <PropertyRow
+              item={item}
+              onPress={() => navigation.navigate('PropertyDetail', { propertyId: item.id })}
+            />
           )}
           ListEmptyComponent={
             <View style={styles.center}>

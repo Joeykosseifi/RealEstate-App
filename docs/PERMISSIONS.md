@@ -169,16 +169,25 @@ it's restored.
 - `locationSource` records how the agent captured the pin —
   `GOOGLE_SEARCH`, `MAP_PIN`, `CURRENT_LOCATION`, or `MANUAL` — for
   provenance, not authorization.
-- The mobile location picker (see docs/PRODUCT.md "Mobile property
-  flow") only requests device location permission for the explicit
-  "Use current location" action — never merely to view or edit a
-  property that already has a saved pin.
-- A full interactive map/search/autocomplete picker needs
-  `react-native-maps` and a configured Google Maps API key, neither of
-  which is available in this environment; see docs/API.md "Google Maps
-  setup" for the documented follow-up and the provider-boundary hook
-  (`useCurrentLocation`) it slots behind without changing any screen
-  that calls it.
+- The mobile location picker (`apps/mobile/src/location/MapLocationPicker.tsx`,
+  see docs/PRODUCT.md "Mobile property flow") is a full interactive
+  `react-native-maps` map — search/autocomplete, tap-to-drop,
+  drag-to-move — and only requests device location permission for the
+  explicit "Use current location" action, via `useCurrentLocation`.
+  Opening the map, viewing a saved pin, or editing one via drag/drop
+  never triggers a permission prompt.
+- Dropping or dragging the pin moves it off whatever Google Place it
+  was tied to, so `googlePlaceId` is cleared at that point — the new
+  coordinates become the source of truth immediately, consistent with
+  "saved lat/lng are permanent, Place ID is supplementary" above. See
+  `apps/mobile/src/location/locationPayload.ts`.
+- See docs/API.md "Google Maps setup" for the required Google Cloud
+  APIs, the env vars (`GOOGLE_MAPS_ANDROID_API_KEY`,
+  `GOOGLE_MAPS_IOS_API_KEY`, `EXPO_PUBLIC_GOOGLE_PLACES_API_KEY`), and
+  why a development build (not Expo Go) is required. No real keys are
+  configured in this environment — the picker still works fully for
+  manual drop/drag/current-location without them; only native tile
+  rendering and search/autocomplete need a real key.
 
 ## Location visibility
 

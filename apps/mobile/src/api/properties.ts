@@ -45,9 +45,12 @@ export interface CreatePropertyInput {
   location?: {
     latitude: number;
     longitude: number;
+    country?: string;
+    region?: string;
     city?: string;
     area?: string;
     address?: string;
+    googlePlaceId?: string;
     locationSource?: string;
   };
   owners?: { fullName: string; phone?: string; email?: string; notes?: string }[];
@@ -67,6 +70,29 @@ export function updateProperty(
   input: Partial<CreatePropertyInput>,
 ): Promise<PropertyDetail> {
   return apiRequest(`/workspaces/${workspaceId}/properties/${propertyId}`, {
+    method: 'PATCH',
+    body: input,
+  });
+}
+
+export interface UpdatePropertyLocationInput {
+  latitude: number;
+  longitude: number;
+  country?: string;
+  region?: string;
+  city?: string;
+  area?: string;
+  address?: string;
+  googlePlaceId?: string;
+  locationSource?: string;
+}
+
+export function updatePropertyLocation(
+  workspaceId: string,
+  propertyId: string,
+  input: UpdatePropertyLocationInput,
+): Promise<PropertyDetail> {
+  return apiRequest(`/workspaces/${workspaceId}/properties/${propertyId}/location`, {
     method: 'PATCH',
     body: input,
   });

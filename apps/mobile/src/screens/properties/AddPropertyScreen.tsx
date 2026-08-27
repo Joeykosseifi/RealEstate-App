@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -13,7 +12,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../auth/AuthContext';
 import { createProperty } from '../../api/properties';
 import { ApiError } from '../../api/client';
-import { useCurrentLocation } from '../../location/useCurrentLocation';
+import { MapLocationPicker } from '../../location/MapLocationPicker';
+import { toLocationDto, type LocationDraft } from '../../location/locationPayload';
 import type { PropertiesStackParamList } from '../../navigation/PropertiesStack';
 
 type Props = NativeStackScreenProps<PropertiesStackParamList, 'AddProperty'>;
@@ -86,7 +86,6 @@ function ChipPicker({
  */
 export function AddPropertyScreen({ navigation }: Props): React.JSX.Element {
   const { currentWorkspace } = useAuth();
-  const { requestCurrentLocation, loading: locating } = useCurrentLocation();
 
   const [propertyType, setPropertyType] = useState('APARTMENT');
   const [listingPurpose, setListingPurpose] = useState('SALE');
@@ -98,10 +97,8 @@ export function AddPropertyScreen({ navigation }: Props): React.JSX.Element {
   const [bathrooms, setBathrooms] = useState('');
   const [areaSqm, setAreaSqm] = useState('');
   const [features, setFeatures] = useState<Set<string>>(new Set());
-  const [city, setCity] = useState('');
-  const [area, setArea] = useState('');
-  const [latitude, setLatitude] = useState('');
-  const [longitude, setLongitude] = useState('');
+  const [location, setLocation] = useState<LocationDraft | null>(null);
+  const [mapVisible, setMapVisible] = useState(false);
   const [ownerName, setOwnerName] = useState('');
   const [ownerPhone, setOwnerPhone] = useState('');
   const [internalNotes, setInternalNotes] = useState('');
@@ -120,14 +117,6 @@ export function AddPropertyScreen({ navigation }: Props): React.JSX.Element {
     });
   };
 
-  const onUseCurrentLocation = async () => {
-    const coordinates = await requestCurrentLocation();
-    if (coordinates) {
-      setLatitude(String(coordinates.latitude));
-      setLongitude(String(coordinates.longitude));
-    }
-  };
-
   const onSubmit = async () => {
     if (!currentWorkspace) return;
     setError(null);
@@ -140,7 +129,6 @@ export function AddPropertyScreen({ navigation }: Props): React.JSX.Element {
 
     setSubmitting(true);
     try {
-      const hasLocation = latitude.trim() !== '' && longitude.trim() !== '';
       await createProperty(currentWorkspace.id, {
         propertyType,
         listingPurpose,
@@ -152,16 +140,10 @@ export function AddPropertyScreen({ navigation }: Props): React.JSX.Element {
         bathrooms: bathrooms ? Number(bathrooms) : undefined,
         areaSqm: areaSqm ? Number(areaSqm) : undefined,
         featureKeys: [...features],
-        location: hasLocation
-          ? {
-              latitude: Number(latitude),
-              longitude: Number(longitude),
-              city: city.trim() || undefined,
-              area: area.trim() || undefined,
-              locationSource: 'MANUAL',
-            }
+        location: location ? toLocationDto(location) : undefined,
+        owners: ownerName.trim()
+          ? [{ fullName: ownerName.trim(), phone: ownerPhone.trim() || undefined }]
           : undefined,
-        owners: ownerName.trim() ? [{ fullName: ownerName.trim(), phone: ownerPhone.trim() || undefined }] : undefined,
         privateDetails: internalNotes.trim() ? { internalNotes: internalNotes.trim() } : undefined,
       });
       navigation.navigate('PropertiesList');
@@ -176,7 +158,11 @@ export function AddPropertyScreen({ navigation }: Props): React.JSX.Element {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Section title="Type & Purpose">
         <ChipPicker options={PROPERTY_TYPES} value={propertyType} onChange={setPropertyType} />
-        <ChipPicker options={LISTING_PURPOSES} value={listingPurpose} onChange={setListingPurpose} />
+        <ChipPicker
+          options={LISTING_PURPOSES}
+          value={listingPurpose}
+          onChange={setListingPurpose}
+        />
       </Section>
 
       <Section title="Basic Information">
@@ -244,44 +230,51 @@ export function AddPropertyScreen({ navigation }: Props): React.JSX.Element {
               style={[styles.chip, features.has(key) && styles.chipActive]}
               onPress={() => toggleFeature(key)}
             >
-              <Text style={[styles.chipText, features.has(key) && styles.chipTextActive]}>{key}</Text>
+              <Text style={[styles.chipText, features.has(key) && styles.chipTextActive]}>
+                {key}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
       </Section>
 
       <Section title="Location">
-        <TextInput style={styles.input} placeholder="City" value={city} onChangeText={setCity} />
-        <TextInput style={styles.input} placeholder="Area / Neighborhood" value={area} onChangeText={setArea} />
-        <View style={styles.row}>
-          <TextInput
-            style={[styles.input, styles.flex1]}
-            placeholder="Latitude"
-            keyboardType="numbers-and-punctuation"
-            value={latitude}
-            onChangeText={setLatitude}
-          />
-          <TextInput
-            style={[styles.input, styles.flex1]}
-            placeholder="Longitude"
-            keyboardType="numbers-and-punctuation"
-            value={longitude}
-            onChangeText={setLongitude}
-          />
-        </View>
-        <TouchableOpacity style={styles.secondaryButton} onPress={() => void onUseCurrentLocation()} disabled={locating}>
-          {locating ? <ActivityIndicator /> : <Text style={styles.secondaryButtonText}>Use current location</Text>}
+        {location ? (
+          <>
+            <Text style={styles.locationSummary}>
+              {(location.address ?? [location.area, location.city].filter(Boolean).join(', ')) ||
+                'Pin placed'}
+            </Text>
+            <Text style={styles.hint}>
+              {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+            </Text>
+          </>
+        ) : (
+          <Text style={styles.hint}>No location set yet.</Text>
+        )}
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => setMapVisible(true)}>
+          <Text style={styles.secondaryButtonText}>
+            {location ? 'Change Location' : 'Set Location'}
+          </Text>
         </TouchableOpacity>
         <Text style={styles.hint}>
-          Exact location is private and visible only to authorized professionals. An interactive map/search picker
-          arrives with a configured Google Maps key (see docs/API.md "Google Maps setup") — enter coordinates manually
-          for now.
+          Exact property location is private and visible only to authorized professionals.
         </Text>
       </Section>
 
       <Section title="Owner Information">
-        <TextInput style={styles.input} placeholder="Owner full name" value={ownerName} onChangeText={setOwnerName} />
-        <TextInput style={styles.input} placeholder="Owner phone" value={ownerPhone} onChangeText={setOwnerPhone} />
+        <TextInput
+          style={styles.input}
+          placeholder="Owner full name"
+          value={ownerName}
+          onChangeText={setOwnerName}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Owner phone"
+          value={ownerPhone}
+          onChangeText={setOwnerPhone}
+        />
       </Section>
 
       <Section title="Private Notes">
@@ -296,9 +289,27 @@ export function AddPropertyScreen({ navigation }: Props): React.JSX.Element {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <TouchableOpacity style={[styles.submitButton, submitting && styles.buttonDisabled]} onPress={() => void onSubmit()} disabled={submitting}>
-        {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Save Property</Text>}
+      <TouchableOpacity
+        style={[styles.submitButton, submitting && styles.buttonDisabled]}
+        onPress={() => void onSubmit()}
+        disabled={submitting}
+      >
+        {submitting ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.submitButtonText}>Save Property</Text>
+        )}
       </TouchableOpacity>
+
+      <MapLocationPicker
+        visible={mapVisible}
+        initialDraft={location}
+        onCancel={() => setMapVisible(false)}
+        onSave={(draft) => {
+          setLocation(draft);
+          setMapVisible(false);
+        }}
+      />
     </ScrollView>
   );
 }
@@ -307,7 +318,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   content: { padding: 16, paddingBottom: 48 },
   section: { marginBottom: 20 },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#555', marginBottom: 8, textTransform: 'uppercase' },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#555',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
   input: {
     borderWidth: 1,
     borderColor: '#d0d0d0',
@@ -335,7 +352,14 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: { color: '#1a73e8', fontWeight: '600' },
   hint: { color: '#888', fontSize: 12 },
-  submitButton: { backgroundColor: '#1a73e8', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 8 },
+  locationSummary: { fontSize: 15, fontWeight: '500', color: '#333', marginBottom: 2 },
+  submitButton: {
+    backgroundColor: '#1a73e8',
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 8,
+  },
   buttonDisabled: { opacity: 0.6 },
   submitButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   error: { color: '#c0392b', marginBottom: 12, textAlign: 'center' },

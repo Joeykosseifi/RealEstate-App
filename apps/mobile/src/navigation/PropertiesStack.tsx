@@ -14,9 +14,21 @@ const Stack = createNativeStackNavigator<PropertiesStackParamList>();
 export function PropertiesStack(): React.JSX.Element {
   return (
     <Stack.Navigator>
-      <Stack.Screen name="PropertiesList" component={PropertiesListScreen} options={{ title: 'Properties' }} />
-      <Stack.Screen name="AddProperty" component={AddPropertyScreen} options={{ title: 'Add Property' }} />
-      <Stack.Screen name="PropertyDetail" component={PropertyDetailScreen} options={{ title: 'Property' }} />
+      <Stack.Screen
+        name="PropertiesList"
+        component={PropertiesListScreen}
+        options={{ title: 'Properties' }}
+      />
+      <Stack.Screen
+        name="AddProperty"
+        component={AddPropertyScreen}
+        options={{ title: 'Add Property' }}
+      />
+      <Stack.Screen
+        name="PropertyDetail"
+        component={PropertyDetailScreen}
+        options={{ title: 'Property' }}
+      />
     </Stack.Navigator>
   );
 }

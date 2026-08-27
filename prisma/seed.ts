@@ -76,7 +76,10 @@ async function seedSystemRoles(): Promise<void> {
     // role's catalog entry actually takes effect on re-seed.
     await prisma.rolePermission.deleteMany({ where: { roleId: savedRole.id } });
     await prisma.rolePermission.createMany({
-      data: permissions.map((permission) => ({ roleId: savedRole.id, permissionId: permission.id })),
+      data: permissions.map((permission) => ({
+        roleId: savedRole.id,
+        permissionId: permission.id,
+      })),
     });
   }
   console.log(`Seeded ${SYSTEM_ROLES.length} system role(s) with role-permission mappings.`);
