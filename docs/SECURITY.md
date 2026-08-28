@@ -84,7 +84,7 @@ Authorization (Milestone 2+) remains a forward statement.
   password reset, but isn't exposed as its own endpoint yet — deferred
   per the instruction to only build what naturally fits Milestone 1).
 
-## Authorization (Milestone 2 — workspaces/admin; Milestone 3 — first entity-level ownership, Property)
+## Authorization (Milestone 2 — workspaces/admin; Milestone 3 — first entity-level ownership, Property; Milestone 5 — publication/marketplace)
 
 - Enforced server-side only. The frontend is never trusted for
   ownership, role, workspace, or permission values.
@@ -108,9 +108,13 @@ Authorization (Milestone 2+) remains a forward statement.
   stay thin — no inline permission checks.
 - Full professional-data ownership/collaboration resolution across
   entity types is still growing milestone by milestone; Property
-  (Milestone 3) is the first one built out. CRM/matching/messaging/etc.
-  remain Milestone 4+; their permission keys exist in the catalog today
-  as a foundation but are not yet enforced by any endpoint.
+  (Milestone 3) is the first one built out. Milestone 5 adds a third,
+  structurally distinct authorization surface: marketplace browsing
+  requires only authentication (`JwtAuthGuard`), deliberately never
+  `@RequireWorkspacePermission` — browsing published listings has
+  nothing to do with workspace membership. Messaging/etc. remain later
+  milestones; their permission keys exist in the catalog today as a
+  foundation but are not yet enforced by any endpoint.
 
 ## Property data isolation and sensitive-field enforcement (Milestone 3)
 
@@ -146,8 +150,16 @@ Authorization (Milestone 2+) remains a forward statement.
   from the database, never accepted from a client — see
   docs/DATABASE.md "Property media storage."
 
-## Reversible moderation (Milestone 2 & 3)
+## Reversible moderation (Milestone 2, 3 & 5)
 
+- **Publication moderation (Milestone 5) follows the same pattern.**
+  Admin unpublish (`ADMIN_UNPUBLISHED`) and reject/request-changes never
+  delete the publication, its version history, or the underlying
+  property — `admin.content.restore` reverses an admin unpublish
+  whenever the property is still business-status eligible, and a
+  professional can reverse their own unpublish via `republish` without a
+  new review. See docs/PERMISSIONS.md "Content moderation lifecycle —
+  property publications."
 - **Property archiving (Milestone 3) follows the same pattern.**
   `POST .../properties/:id/archive` sets `propertyStatus = ARCHIVED` and
   stamps `archivedAt`/`archivedByUserId` — it never deletes the
@@ -262,10 +274,22 @@ Authorization (Milestone 2+) remains a forward statement.
   `client.property_shortlisted`, `client.property_removed_from_shortlist`,
   `presentation.created`, `presentation.updated`, `presentation.generated`,
   `presentation.archived`, `presentation.accessed` (logged every time the
-  signed PDF URL is issued, not just on generation). Never logs full
-  client contact details or presentation content — only ids and
-  non-secret structured context, same discipline as every prior
-  milestone.
+  signed PDF URL is issued, not just on generation). Milestone 5 adds:
+  `property.publication_draft_created`, `property.publication_updated`,
+  `property.publication_submitted`, `property.publication_resubmitted`
+  (a version > 1 submission — i.e. following changes-requested/rejected
+  — logged distinctly from a first-ever submission),
+  `property.publication_changes_requested`, `property.publication_rejected`,
+  `property.publication_approved`, `property.published` (both logged on
+  a single approval, since approving and publishing happen atomically),
+  `property.owner_unpublished` (both manual and the automatic
+  business-status-safety transition, tagged `autoTransition: true` in
+  metadata for the latter), `property.admin_unpublished`,
+  `property.publication_restored` (tagged with `actor: 'admin'` or
+  `actor: 'owner'`), `marketplace.favorite_added`,
+  `marketplace.favorite_removed`. Never logs the publication snapshot
+  content itself — only ids, versions, and reasons, same discipline as
+  every prior milestone.
 - Never logged: passwords, access tokens, refresh tokens, OTP codes,
   reset tokens, full payment credentials. `AuditLog.metadata` is only
   ever given non-secret structured context (e.g. `{ accountType }`,

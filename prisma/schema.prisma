@@ -10,20 +10,24 @@
 // Milestone 3: the professional private property database — Property
 // and its related models (location, features, media, owner contacts,
 // private details).
-// Milestone 4 (this revision): client CRM (ClientRecord), per-client
-// property requirements (ClientRequirement), a shortlist relationship
+// Milestone 4: client CRM (ClientRecord), per-client property
+// requirements (ClientRequirement), a shortlist relationship
 // (ClientPropertyShortlist), and client-facing PDF presentations
 // (PropertyPresentation/PropertyPresentationItem). Matching itself is
 // computed on demand from current data (see MatchingService) — no
-// match-result table. See docs/DATABASE.md for the full
+// match-result table.
+// Milestone 5 (this revision): the publication workflow
+// (PropertyPublication/PropertyPublicationVersion/
+// PropertyPublicationMedia) that turns a private Property into a
+// reviewed, versioned, publicly-visible marketplace listing, plus
+// client-side MarketplaceFavorite. See docs/DATABASE.md for the full
 // model-introduction schedule and the rationale behind specific design
 // choices (e.g. `User.pendingCompanyProfile`, the workspace type CHECK
-// constraint, the Role scope/uniqueness design, and the Milestone 3/4
+// constraint, the Role scope/uniqueness design, and the Milestone 3/4/5
 // design decisions below).
 //
-// Do not add collaboration/publication/subscription models yet — those
-// belong to later milestones. Publication status is deliberately NOT
-// part of Property yet (Milestone 5).
+// Do not add collaboration/subscription models yet — those belong to
+// later milestones.
 
 generator client {
   provider = "prisma-client-js"
@@ -158,6 +162,7 @@ model User {
   createdProperties    Property[]             @relation("PropertyCreatedBy")
   createdClientRecords ClientRecord[]         @relation("ClientRecordCreatedBy")
   createdPresentations PropertyPresentation[] @relation("PresentationCreatedBy")
+  marketplaceFavorites MarketplaceFavorite[]
 
   @@map("users")
 }
@@ -297,6 +302,7 @@ model Workspace {
   properties    Property[]
   clients       ClientRecord[]
   presentations PropertyPresentation[]
+  publications  PropertyPublication[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -574,6 +580,7 @@ model Property {
   privateDetails PropertyPrivateDetails?
   shortlistedFor ClientPropertyShortlist[]
   presentedIn    PropertyPresentationItem[]
+  publication    PropertyPublication?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -659,6 +666,8 @@ model PropertyMedia {
   uploadedByUserId String @db.Uuid
 
   createdAt DateTime @default(now())
+
+  publicationSelections PropertyPublicationMedia[]
 
   @@index([propertyId, sortOrder])
   @@map("property_media")
@@ -996,4 +1005,214 @@ model PropertyPresentationItem {
   @@index([presentationId])
   @@index([propertyId])
   @@map("property_presentation_items")
+}
+
+// ---------------------------------------------------------------------------
+// Milestone 5 — Publication workflow, admin approval & client marketplace
+//
+// Every property is PRIVATE by default. `PropertyPublication` is the
+// separate visibility/review layer over a `Property` — one row per
+// property, created lazily the first time a professional starts
+// preparing a public listing. A property with NO `PropertyPublication`
+// row is implicitly in the PRIVATE state (never stored — see
+// `PropertyPublicationStatus` doc comment below).
+//
+// Versioning: `PropertyPublication` holds the *current lifecycle state*;
+// `PropertyPublicationVersion` is an append-only, immutable-once-submitted
+// history of every submission, satisfying both "admin reviews an exact,
+// stable snapshot" (never the live, possibly-since-edited Property) and
+// "preserve full review history" in one table. `latestVersionId` points
+// at the version currently being drafted/reviewed; `publishedVersionId`
+// points at whichever version is the one *currently live to the public*
+// — these are deliberately different pointers so a newer pending edit
+// can be under review without touching what's already published (see
+// docs/DATABASE.md "Publication versioning").
+// ---------------------------------------------------------------------------
+
+/// PRIVATE is never a stored value — the absence of a `PropertyPublication`
+/// row for a property IS the PRIVATE state. Every other value is a real
+/// column value. See docs/DATABASE.md "Publication state machine" for
+/// the full transition diagram.
+enum PropertyPublicationStatus {
+  DRAFT
+  PENDING_REVIEW
+  CHANGES_REQUESTED
+  PUBLISHED
+  REJECTED
+  ADMIN_UNPUBLISHED
+  OWNER_UNPUBLISHED
+  ARCHIVED
+}
+
+/// Per-submission status, stored on each immutable
+/// `PropertyPublicationVersion` row — independent of, but kept in sync
+/// with, `PropertyPublication.status` (see PublicationsService).
+enum PropertyPublicationVersionStatus {
+  DRAFT
+  PENDING_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+  REJECTED
+}
+
+model PropertyPublication {
+  id         String   @id @default(uuid()) @db.Uuid
+  propertyId String   @unique @db.Uuid
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  /// Denormalized from `Property.workspaceId` at creation — never changes
+  /// (ownership is immutable; see docs/PERMISSIONS.md). A real relation
+  /// (not just a scalar) so the admin queue/review detail can join the
+  /// workspace's display name without a second query.
+  workspaceId String    @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  status PropertyPublicationStatus @default(DRAFT)
+
+  /// The version currently being drafted, under review, or most recently
+  /// decided — NOT necessarily the one currently public. Null only
+  /// before the very first draft is created (impossible in practice: the
+  /// row itself is created atomically with version 1).
+  latestVersionId String?                     @unique @db.Uuid
+  latestVersion   PropertyPublicationVersion? @relation("LatestVersion", fields: [latestVersionId], references: [id])
+
+  /// The version currently visible on the public marketplace. Only ever
+  /// updated atomically on approval — see PublicationsAdminService.approve.
+  publishedVersionId String?                     @unique @db.Uuid
+  publishedVersion   PropertyPublicationVersion? @relation("PublishedVersion", fields: [publishedVersionId], references: [id])
+
+  submittedByUserId String?   @db.Uuid
+  submittedAt       DateTime?
+
+  approvedByUserId String?   @db.Uuid
+  approvedAt       DateTime?
+
+  rejectedByUserId String?   @db.Uuid
+  rejectedAt       DateTime?
+  rejectionReason  String?
+
+  changesRequestedByUserId String?   @db.Uuid
+  changesRequestedAt       DateTime?
+  changesRequestedReason   String?
+
+  publishedAt DateTime?
+
+  unpublishedAt       DateTime?
+  unpublishedByUserId String?   @db.Uuid
+  unpublishReason     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions             PropertyPublicationVersion[] @relation("PublicationVersions")
+  marketplaceFavorites MarketplaceFavorite[]
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([workspaceId, status])
+  @@index([submittedAt])
+  @@index([publishedAt])
+  @@map("property_publications")
+}
+
+/// Immutable once its status leaves DRAFT (enforced in
+/// PublicationsService, not the DB — see docs/DATABASE.md). Contains
+/// ONLY explicitly-allowlisted public-safe fields: never the professional
+/// `Property`/`PropertyOwner`/`PropertyPrivateDetails` rows, and never a
+/// "professional DTO minus a few fields" — see `publication.mapper.ts`.
+model PropertyPublicationVersion {
+  id            String              @id @default(uuid()) @db.Uuid
+  publicationId String              @db.Uuid
+  publication   PropertyPublication @relation("PublicationVersions", fields: [publicationId], references: [id], onDelete: Cascade)
+
+  versionNumber Int
+
+  status PropertyPublicationVersionStatus @default(DRAFT)
+
+  publicTitle       String
+  publicDescription String?
+  publicPrice       Decimal        @db.Decimal(14, 2)
+  currency          String         @db.Char(3)
+  propertyType      PropertyType
+  listingPurpose    ListingPurpose
+  bedrooms          Int?
+  bathrooms         Int?
+  areaSqm           Decimal?       @db.Decimal(10, 2)
+
+  /// Feature keys from the same canonical catalog as the professional
+  /// record (see property-features.catalog.ts) — never a parallel
+  /// vocabulary. Selected explicitly by the professional as public-safe;
+  /// not automatically copied from the private record.
+  publicFeatureKeys String[]
+
+  /// Reuses `PropertyLocationVisibility` (Milestone 3 foundation, now
+  /// enforced). PRIVATE/WORKSPACE never populate public lat/lng below —
+  /// see docs/PERMISSIONS.md "Public location rules".
+  locationVisibility PropertyLocationVisibility
+  publicCountry      String?
+  publicCity         String?
+  publicArea         String?
+  publicLatitude     Decimal?                   @db.Decimal(9, 6)
+  publicLongitude    Decimal?                   @db.Decimal(9, 6)
+
+  submittedByUserId String?   @db.Uuid
+  submittedAt       DateTime?
+
+  /// The actor/timestamp/reason of THIS version's most recent review
+  /// decision (approve/reject/request-changes) — one row per submission,
+  /// so this is never overwritten by a later version's decision.
+  reviewedByUserId String?   @db.Uuid
+  reviewedAt       DateTime?
+  reviewReason     String?
+
+  createdAt DateTime @default(now())
+
+  media PropertyPublicationMedia[]
+
+  currentForPublication   PropertyPublication? @relation("LatestVersion")
+  publishedForPublication PropertyPublication? @relation("PublishedVersion")
+
+  @@unique([publicationId, versionNumber])
+  @@index([publicationId])
+  @@index([status])
+  @@map("property_publication_versions")
+}
+
+/// Explicit public-media allowlist — only rows here are ever servable
+/// publicly, and only ever `PropertyMediaType.IMAGE` (validated in
+/// PublicationsService, not the DB). Never a blanket "publish every
+/// private image" — see docs/PERMISSIONS.md "Public media rules".
+model PropertyPublicationMedia {
+  id        String                     @id @default(uuid()) @db.Uuid
+  versionId String                     @db.Uuid
+  version   PropertyPublicationVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  propertyMediaId String        @db.Uuid
+  propertyMedia   PropertyMedia @relation(fields: [propertyMediaId], references: [id], onDelete: Cascade)
+
+  sortOrder Int     @default(0)
+  isMain    Boolean @default(false)
+
+  @@unique([versionId, propertyMediaId])
+  @@index([versionId, sortOrder])
+  @@map("property_publication_media")
+}
+
+/// Favorites a PUBLICATION (the marketplace listing), never the private
+/// `Property` directly — see docs/PERMISSIONS.md "Marketplace favorite
+/// vs. CRM shortlist". Any authenticated platform user may favorite,
+/// independent of workspace membership.
+model MarketplaceFavorite {
+  id            String              @id @default(uuid()) @db.Uuid
+  userId        String              @db.Uuid
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publicationId String              @db.Uuid
+  publication   PropertyPublication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, publicationId])
+  @@index([userId])
+  @@index([publicationId])
+  @@map("marketplace_favorites")
 }

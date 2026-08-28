@@ -434,47 +434,175 @@ These are two **independent** concepts, deliberately never linked:
   accepts either prior state (`SUSPENDED` or `DEACTIVATED`) and flips
   back to `ACTIVE`.
 
-## Future content moderation lifecycle (foundation only — Milestone 5)
+## Content moderation lifecycle — property publications (Milestone 5)
 
-The `admin.content.view` / `admin.content.unpublish` /
-`admin.content.archive` / `admin.content.restore` permission keys exist
-in the catalog today as a foundation; **no content/property model exists
-yet, and this milestone does not implement any of the transitions
-below** — they are documented now so Milestone 5's moderation feature is
-built against an already-agreed shape rather than an invented one at
-that time.
-
-Normal moderation on any future publicly-visible listing must be a
-reversible state change, resolved server-side, never a hard delete:
+Implemented, not foundation. `PropertyPublication` is a separate
+visibility/review layer over `Property` — a property remains PRIVATE by
+default (no `PropertyPublication` row at all is the PRIVATE state, never
+a stored enum value) until a professional explicitly prepares and
+submits a listing.
 
 ```
-PUBLISHED ──(admin.content.unpublish)──▶ ADMIN_UNPUBLISHED
-                                              │
-                        (admin.content.restore)   (admin.content.archive)
-                                              │              │
-                                              ▼              ▼
-                                          RESTORED       ARCHIVED
-                                     (back to its prior            │
-                                      business state)   (admin.content.restore)
-                                                                    │
-                                                                    ▼
-                                                                RESTORED
+                 (property.publish, saveDraft)
+PRIVATE ───────────────────────────────────────▶ DRAFT
+                                                    │ (property.publish, submit)
+                                                    ▼
+                                            PENDING_REVIEW
+                          ┌───────────────────────┼───────────────────────┐
+        (admin.content.review,           (admin.content.review,    (admin.content.review,
+         request-changes)                     reject)                  approve)
+                          ▼                       ▼                       ▼
+                CHANGES_REQUESTED             REJECTED               PUBLISHED
+                          │                       │                       │
+              (edit → new version,     (edit → new version,   ┌───────────┼───────────┐
+               resubmit)                resubmit)             │           │           │
+                          └──────────────┬────────┘   (property.unpublish) (admin.content.unpublish) (business status
+                                         PENDING_REVIEW  OWNER_UNPUBLISHED  ADMIN_UNPUBLISHED   → SOLD/RENTED/ARCHIVED)
+                                        (new version)          │                  │                     │
+                                                      (property.publish, │  (admin.content.restore) OWNER_UNPUBLISHED
+                                                       republish)        │        │                or ARCHIVED
+                                                                ▼        ▼        ▼
+                                                            PUBLISHED  ARCHIVED (terminal)
 ```
 
-In prose: `PUBLISHED → ADMIN_UNPUBLISHED → RESTORED`, or
-`PUBLISHED → ADMIN_UNPUBLISHED → ARCHIVED → RESTORED`. Whichever of
-those transitions Milestone 5 implements, it must preserve — exactly as
-the `AdminUsersService`/`AdminCompaniesService` pattern already does for
+Every transition is server-side, resolved from the database, never a
+hard delete — see `apps/api/src/publications/publications.service.ts`
+(professional-initiated transitions: draft/submit/cancel/unpublish/
+republish) and `admin-publications.service.ts` (admin-initiated:
+approve/reject/request-changes/unpublish/restore). Reused permissions:
+`property.publish`/`property.unpublish` (Milestone 3 foundation, now
+enforced) plus a new `admin.content.review` (approve/reject/
+request-changes — architecturally distinct from `admin.content.unpublish`,
+which only governs taking an already-published listing down).
+
+Preserved through every transition, exactly as the
+`AdminUsersService`/`AdminCompaniesService` pattern already does for
 users/companies:
 
-- the listing's ownership (which workspace it belongs to — never
-  transferred to the admin or platform),
-- its full audit history (append-only, actions never overwritten),
-- the moderation reason for each unpublish/archive/restore action,
+- the listing's ownership (`Property.workspaceId` — never transferred to
+  the admin or platform; approving a publication does not make the admin
+  an owner — see `publication-admin-approval.e2e-spec.ts` test 45),
+- its full review history (append-only `PropertyPublicationVersion` rows
+  — one per submission, never overwritten; see "Publication versioning"
+  below),
+- the moderation/review reason for each reject/request-changes/
+  admin-unpublish action,
 - timestamps for each transition,
-- every business relationship the listing participates in (CRM links,
-  collaboration grants, etc. — nothing cascades or gets orphaned by a
-  moderation action).
+- every business relationship the property participates in (CRM
+  shortlist, presentations, etc. — nothing cascades or gets orphaned by
+  a moderation action).
+
+### Publication versioning
+
+`PropertyPublication` holds two independent pointers into its own
+`PropertyPublicationVersion` history: `latestVersionId` (the version
+currently being drafted/reviewed/most-recently-decided) and
+`publishedVersionId` (the version currently live to the public). These
+are deliberately different pointers — per the spec's "major public edits
+after approval" rule, a professional editing an already-published
+listing creates a **new** version in `PENDING_REVIEW` while the
+previously-approved version stays the one the public marketplace serves,
+until the new version is itself approved (which atomically swaps
+`publishedVersionId`). A version is immutable from the moment it leaves
+`DRAFT` status — editing while `PENDING_REVIEW` is rejected with `409`;
+the professional must cancel back to `DRAFT` (same version, no new
+version number, since nothing was reviewed yet) or wait.
+
+Marketplace visibility is therefore **not** simply
+`PropertyPublication.status === 'PUBLISHED'` — it's "has a
+`publishedVersionId`, and nothing has explicitly taken it down"
+(`status NOT IN (ADMIN_UNPUBLISHED, OWNER_UNPUBLISHED, ARCHIVED)`), so a
+listing stays visible even while a newer edit is pending/changes-requested/
+rejected. See `MarketplaceService.PUBLICATION_VISIBILITY_WHERE` — this
+was a real bug found and fixed by `publication-security.e2e-spec.ts` test
+11 during development, not a hypothetical.
+
+### Business-status safety (Milestone 5)
+
+If the underlying property's business status becomes `SOLD`, `RENTED`,
+or the property is archived while its listing is `PUBLISHED`, two
+independent defense layers apply (both required, not either/or):
+
+1. **Layer A — automatic transition.** `PropertiesService` (inside the
+   same status-change/archive call) transitions the publication to
+   `OWNER_UNPUBLISHED` (business status change) or `ARCHIVED` (property
+   archived), audited with `autoTransition: true` metadata so it's
+   distinguishable from a manual action.
+2. **Layer B — marketplace query filter.** Independently,
+   `MarketplaceService`'s query also requires
+   `property.propertyStatus IN (AVAILABLE, RESERVED)` on every read, so
+   even if layer A were somehow bypassed, a sold/rented/archived property
+   can never be returned to a marketplace browser.
+
+**Documented product decision**: `RESERVED` properties remain publicly
+visible (a "reserved but not yet sold" listing is still meaningful
+marketplace content on most real platforms); only `SOLD`/`RENTED`/
+`ARCHIVED` trigger the safety transition.
+
+### Owner republish (deliberate, minimal addition beyond the spec's literal endpoint list)
+
+`POST .../publication/republish` reverses an `OWNER_UNPUBLISHED` listing
+back to `PUBLISHED` **without a new admin review**, since the content is
+byte-for-byte the same previously-approved snapshot — only re-checked
+against current business-status eligibility (same rule as admin
+`restore()`). This exists because the spec provides no way to undo a
+professional's own unpublish action, and "reversible wherever possible"
+is a stated design principle throughout; it's the direct professional-side
+analogue of admin `restore()`.
+
+## Marketplace authorization (Milestone 5)
+
+- **Marketplace authorization is not workspace authorization.** Browsing
+  published listings (`MarketplaceController`/`FavoritesController`)
+  requires only `JwtAuthGuard` — any authenticated platform user
+  (CLIENT, AGENT, or COMPANY account), independent of workspace
+  membership. It is deliberately never gated by
+  `@RequireWorkspacePermission`. The existing product requires
+  authentication everywhere else, so this stays consistent rather than
+  introducing anonymous access.
+- **Marketplace source of truth.** Every marketplace query reads
+  `PropertyPublication`/`PropertyPublicationVersion`/
+  `PropertyPublicationMedia` — never the raw `Property`/
+  `PropertyLocation`/`PropertyMedia` tables. This is what makes the
+  privacy guarantee structural rather than a mapping discipline: the
+  marketplace mapper (`marketplace.mapper.ts`) has no code path that can
+  reach `PropertyOwner`/`PropertyPrivateDetails` at all.
+- **Marketplace identifier.** The public/client-facing identifier is
+  always the `PropertyPublication` id (`publicationId`), never the
+  private `propertyId` — a client can never use a marketplace URL to
+  probe for or guess a professional's internal property id.
+- **Admin moderation boundary.** `AdminPublicationsService` reads only
+  the publication/version/media tables plus the submitter's display name
+  and workspace name — never `PropertyOwner`/`PropertyPrivateDetails`.
+  A platform moderator can approve, reject, or request changes on a
+  listing without ever seeing owner contacts, commission notes, or
+  internal reference numbers — preserving the Milestone 2
+  admin/private-data boundary. `SUPER_ADMIN`'s broad platform access
+  does not create an exception: the publication snapshot is the only
+  data surface moderation needs, so there is nothing extra to expose.
+- **Public location rules.** Reuses `PropertyLocationVisibility`
+  (Milestone 3 foundation, now enforced): `PRIVATE`/`WORKSPACE` never
+  populate any public location field at all (not even city/area);
+  `PUBLIC_APPROXIMATE` exposes city/area only; only `PUBLIC_EXACT`
+  populates `publicLatitude`/`publicLongitude`, and only when the
+  property actually has a saved location — coordinates are never
+  fabricated or silently copied from the private pin.
+- **Public media rules.** Only `PropertyMediaType.IMAGE` rows explicitly
+  selected via `PropertyPublicationMedia` are ever servable publicly.
+  Selecting/deselecting a public image never deletes the underlying
+  private `PropertyMedia` row — publication selection is a pure overlay.
+  Public images are served through the same short-lived signed-URL
+  mechanism as private media (`StorageService.getSignedAccessUrl`) —
+  access control lives entirely in which media the marketplace query is
+  even allowed to select, not in the URL-serving endpoint itself.
+- **Marketplace favorite vs. CRM shortlist.** `MarketplaceFavorite`
+  favorites a `PropertyPublication` (marketplace content, any
+  authenticated user); `ClientPropertyShortlist` (Milestone 4) shortlists
+  a `Property` for a specific CRM client (professional-only). These are
+  deliberately separate models serving different audiences — never
+  conflate them. A favorite whose listing later becomes unavailable
+  returns `listing: null` in `GET /marketplace/favorites` rather than
+  exposing stale or private data.
 
 ## Moderation reason: two-tier design (Milestone 2, intentional)
 
@@ -533,7 +661,7 @@ standalone script, `apps/api/scripts/bootstrap-super-admin.ts` (run via
 (registered through the normal flow), and idempotently grants the role,
 writing an audit log entry with `actorUserId: null` (system action).
 
-## Status (Milestone 4)
+## Status (Milestone 5)
 
 Implemented through Milestone 2: workspace isolation and switching,
 membership lifecycle (invite → accept → suspend/remove/role-change),
@@ -567,11 +695,23 @@ structurally cannot carry sensitive property data), and the mobile
 Clients tab (client list/detail/add, requirement form, match results,
 shortlist, presentation create/view/share).
 
-Not yet built: CRM, matching, messaging, viewings, publication/public
-marketplace, collaboration, commission agreements, subscriptions,
-payments, and a full admin frontend — those remain future milestones,
-and this document continues to define their target permission model
-above (`property.publish`/`property.share`/`client.*`/
-`collaboration.*` keys exist in the catalog today but are not yet
-checked by any endpoint; `PropertyLocation.locationVisibility` exists
-in the schema but no public endpoint reads it yet).
+Milestone 5 adds: the publication workflow (`property.publish`/
+`property.unpublish`, now actually enforced, plus a new
+`admin.content.review` for approve/reject/request-changes),
+`PropertyPublication`/`PropertyPublicationVersion`/
+`PropertyPublicationMedia` (private-by-default, versioned, immutable
+snapshots reviewed by admin/professional/public from the exact same
+data), business-status safety (two independent defense layers), the
+client marketplace (`GET /marketplace/properties`, search/filter/sort,
+publication-id-only, never the private `propertyId`), `MarketplaceFavorite`
+(distinct from the CRM shortlist), a functional admin-web moderation UI
+(login, review queue, review detail with approve/reject/request-changes/
+unpublish/restore), and the mobile Home tab becoming the real client
+marketplace (browse/search/detail/favorites) alongside a "Prepare
+Listing" flow on the professional property detail screen.
+
+Not yet built: messaging, viewings, collaboration, commission
+agreements, subscriptions, payments — those remain future milestones,
+and this document continues to define `collaboration.*`'s target
+permission model above (the keys exist in the catalog today but are not
+yet checked by any endpoint).

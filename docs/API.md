@@ -299,6 +299,82 @@ no code path that could leak them into a PDF. Location shows only
 directly against generated PDF bytes (not just the DTO) in
 `apps/api/test/presentation-security.e2e-spec.ts`.
 
+## Publication, moderation & marketplace endpoints (Milestone 5)
+
+### Professional publication endpoints
+
+All under `workspaces/:id/properties/:propertyId/publication`. `PUT`/
+`submit`/`cancel`/`republish` require `property.publish`; `unpublish`
+requires `property.unpublish`. Reuses the standard workspace
+authorization chain — a publication belonging to another workspace's
+property is `404`, never distinguishable from one that doesn't exist.
+
+| Method & path | Notes |
+|---|---|
+| `GET .../publication` | Returns the current `PublicationDetail`, or `null` if the property has never had a publication row at all (the PRIVATE state — never a stored value, see docs/DATABASE.md). |
+| `PUT .../publication` | Full-replace draft save — creates the publication (and version 1) on first call. Edits the current editable version in place while `DRAFT`; starts a new version while `CHANGES_REQUESTED`/`REJECTED`/`APPROVED`; `409` while `PENDING_REVIEW` (immutable — cancel first). `200`. |
+| `POST .../publication/submit` | Validates eligibility (property `AVAILABLE`, public title/price/≥1 image/city-if-publicly-visible all present), freezes the current draft version, sets `PENDING_REVIEW`. `200`, `400` on ineligibility, `409` if not currently `DRAFT`. |
+| `POST .../publication/cancel` | Professional-initiated withdrawal from review — reverts the SAME version to `DRAFT` (nothing was decided, so no new version). `200`, `409` unless `PENDING_REVIEW`. |
+| `POST .../publication/unpublish` | Takes an approved, live listing down. Property stays fully intact and private-database-visible. `200`, `409` unless `PUBLISHED`. |
+| `POST .../publication/republish` | Deliberate, minimal addition beyond the spec's literal endpoint list (see docs/PERMISSIONS.md "Owner republish") — reverses the professional's own unpublish without a new admin review, since the content is unchanged. `200`, `409` unless `OWNER_UNPUBLISHED` and still business-status eligible. |
+
+### Admin publication review endpoints
+
+All under `admin/property-publications`, using platform (not workspace)
+authorization — see docs/PERMISSIONS.md "Admin authorization is never
+workspace membership."
+
+| Method & path | Permission | Notes |
+|---|---|---|
+| `GET admin/property-publications` | `admin.content.view` | Paginated queue; defaults to `status=PENDING_REVIEW`, oldest submission first. Filters: `status`, `workspaceId`, `propertyType`, `listingPurpose`, `submittedByUserId`, `search`. |
+| `GET admin/property-publications/:id` | `admin.content.view` | Full `PublicationReviewDetail` — snapshot, submitter name, workspace name, review history. Never `PropertyOwner`/`PropertyPrivateDetails` (not reachable from this query at all). |
+| `POST admin/property-publications/:id/approve` | `admin.content.review` | Row-locked; `409` if not currently `PENDING_REVIEW` (already decided by another reviewer). Atomically marks the version `APPROVED`, sets `publishedVersionId`, `status: PUBLISHED`. `200`. |
+| `POST admin/property-publications/:id/reject` | `admin.content.review` | `{ reason }` required (`400` without one). Property remains fully private/intact. `200`, `409` unless `PENDING_REVIEW`. |
+| `POST admin/property-publications/:id/request-changes` | `admin.content.review` | `{ reason }` required. `200`, `409` unless `PENDING_REVIEW`. |
+| `POST admin/property-publications/:id/unpublish` | `admin.content.unpublish` | `{ reason }` required. `200`, `409` unless `PUBLISHED`. |
+| `POST admin/property-publications/:id/restore` | `admin.content.restore` | Only restores when the underlying property's business status is still `AVAILABLE`/`RESERVED` — `409` otherwise (e.g. it became `SOLD` while taken down). `200`, `409` unless `ADMIN_UNPUBLISHED`. |
+
+`admin.content.review` is a Milestone 5 addition to the permission
+catalog, architecturally distinct from `admin.content.unpublish` (which
+only governs taking an already-published listing down) — see
+docs/PERMISSIONS.md. All five decision endpoints lock the publication
+row (`SELECT ... FOR UPDATE`) before reading/transitioning it, so two
+concurrent decisions never both succeed — see
+`apps/api/test/publication-concurrency.e2e-spec.ts`.
+
+### Marketplace endpoints
+
+Require only `JwtAuthGuard` (any authenticated platform user —
+CLIENT/AGENT/COMPANY), never workspace authorization — see
+docs/PERMISSIONS.md "Marketplace authorization is not workspace
+authorization."
+
+| Method & path | Notes |
+|---|---|
+| `GET marketplace/properties` | Paginated. Filters: `search`, `propertyType`, `listingPurpose`, `priceMin`/`priceMax`, `bedroomsMin`/`bathroomsMin`, `areaMin`/`areaMax`, `country`/`city`/`area`, `features`. `sort`: `newest` (default) / `price_asc` / `price_desc`. Source of truth is `PropertyPublication`/`PropertyPublicationVersion`, never the raw `Property` — see docs/PERMISSIONS.md "Marketplace source of truth." |
+| `GET marketplace/properties/:publicationId` | Full `PublicPropertyDetail`. `:publicationId` is the `PropertyPublication` id — the private `propertyId` is never accepted or exposed here. Unavailable/nonexistent → plain `404`, never distinguishable. |
+| `POST marketplace/properties/:publicationId/favorite` | Idempotent (`204` even if already favorited). `404` if the listing isn't currently eligible for favoriting (same eligibility rule as browsing). |
+| `DELETE marketplace/properties/:publicationId/favorite` | `204`. |
+| `GET marketplace/favorites` | Paginated. A favorite whose listing has since become unavailable returns `listing: null` rather than stale/private data. |
+
+**Public location rules:** `PRIVATE`/`WORKSPACE` visibility never
+populate any public location field (not even city/area); `PUBLIC_APPROXIMATE`
+exposes city/area only; only `PUBLIC_EXACT` populates exact coordinates,
+and only when the property actually has a saved location. Never
+fabricated, never silently copied from the private pin.
+
+**Public media rules:** only `PropertyMediaType.IMAGE` rows explicitly
+selected via the draft's `media` array are ever servable publicly.
+Served through the same short-lived signed-URL mechanism as private
+media (`StorageService.getSignedAccessUrl` → `GET /storage/access`) —
+no separate "public" storage tier; access control lives entirely in
+which media the marketplace query is allowed to select.
+
+**Business-status safety:** `SOLD`/`RENTED`/archived properties are
+filtered by two independent layers — see docs/PERMISSIONS.md
+"Business-status safety." `RESERVED` properties remain visible
+(documented product decision).
+
 ### Mobile setup (Milestone 3)
 
 `apps/mobile` reads `EXPO_PUBLIC_API_URL` (defaults to
@@ -363,6 +439,60 @@ return it, `AuthContext` additionally calls `GET /workspaces/:id` — the
 one workspace endpoint that does return `permissions: string[]` —
 whenever the acting workspace changes, and exposes it as
 `permissions: Set<string>` alongside `currentWorkspace`.
+
+### Mobile marketplace & publication UI (Milestone 5)
+
+The Home bottom tab (previously a placeholder) is now the client
+marketplace: a `MarketplaceStack` with Home (New Listings / For Sale /
+For Rent rails, deterministic newest-first queries — no recommendation
+AI), Search (text + type/purpose/sort filters, infinite scroll), Listing
+Detail (image gallery, price/details/features/safe location, favorite
+toggle, an "I'm Interested" action), and Favorites. A shared
+`ListingCard` component guarantees the exact same public-safe fields
+render identically across all three list surfaces.
+
+**"I'm Interested" / Contact Agent, scoped deliberately.** Full
+messaging is reserved for a later milestone (see "Do NOT build yet"
+below) and the spec explicitly allows either a minimal inquiry
+foundation or routing to a clear future-safe interaction. This build
+takes the latter: tapping "I'm Interested" adds the listing to
+Favorites (a real, immediately useful action) and shows a message that
+direct contact is coming in a future update — never a dead button, and
+no new inquiry/messaging surface area to secure and test in this
+milestone.
+
+On the professional side, `PropertyDetailScreen` gained a "Marketplace
+Listing" section reflecting the current `PublicationDetail` (or its
+absence, meaning private) with state-appropriate actions — Prepare
+Listing / Edit Public Listing / Submit for Review / Cancel Submission /
+Edit & Resubmit / Unpublish / Republish — driven by a pure, unit-tested
+mapping (`apps/mobile/src/publications/publicationStatus.ts`) from
+publication status to available actions. `PublishPropertyScreen` is the
+single-scrollable-form "Prepare Public Listing" flow (public
+title/description/price, bedrooms/bathrooms/area, feature selection,
+location-visibility choice, image selection with a "Main" indicator) —
+the same simplification precedent as `AddPropertyScreen` (Milestone 3),
+not a literal multi-step wizard. `propertyType`/`listingPurpose` are
+shown read-only, mirrored from the actual property, rather than
+editable — a listing should never claim to be a different type of
+property than it actually is.
+
+### Admin-web moderation UI (Milestone 5)
+
+`apps/admin-web` (previously the unmodified `create-next-app` starter)
+now has the platform's first meaningful admin moderation UI: a login
+page (any account holding a PLATFORM role with `admin.content.*`
+permissions), a review queue (status tabs defaulting to `PENDING_REVIEW`,
+paginated table), and a review detail page (public snapshot preview
+including images, submitter/workspace identity, full review history,
+and Approve/Request Changes/Reject/Unpublish/Restore actions gated by
+what the current status actually allows). Request Changes/Reject/
+Unpublish all use a shared `ReasonDialog` that enforces a non-empty
+(≥3 character) reason client-side — the API independently re-validates
+and remains the real authority. Deliberately minimal: a plain
+`fetch`-based API client storing the JWT in `localStorage`, no design
+system beyond Tailwind utility classes — functional correctness, not
+visual polish, was the priority for this internal tool.
 
 ## N+1 prevention
 

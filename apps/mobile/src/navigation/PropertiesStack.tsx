@@ -2,11 +2,13 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { PropertiesListScreen } from '../screens/properties/PropertiesListScreen';
 import { AddPropertyScreen } from '../screens/properties/AddPropertyScreen';
 import { PropertyDetailScreen } from '../screens/properties/PropertyDetailScreen';
+import { PublishPropertyScreen } from '../screens/properties/PublishPropertyScreen';
 
 export type PropertiesStackParamList = {
   PropertiesList: undefined;
   AddProperty: undefined;
   PropertyDetail: { propertyId: string };
+  PublishProperty: { propertyId: string };
 };
 
 const Stack = createNativeStackNavigator<PropertiesStackParamList>();
@@ -28,6 +30,11 @@ export function PropertiesStack(): React.JSX.Element {
         name="PropertyDetail"
         component={PropertyDetailScreen}
         options={{ title: 'Property' }}
+      />
+      <Stack.Screen
+        name="PublishProperty"
+        component={PublishPropertyScreen}
+        options={{ title: 'Prepare Listing' }}
       />
     </Stack.Navigator>
   );

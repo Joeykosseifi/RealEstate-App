@@ -94,8 +94,10 @@ proposition" above, implemented:
 
 `apps/mobile` now has its first real screens beyond the Expo starter:
 sign-in, a bottom-tab shell (Home / Properties / Clients / Inbox / More
-— Properties and, as of Milestone 4, Clients have business logic; Home
-and Inbox remain labeled placeholders, not dead buttons), and three
+— Properties, Clients (Milestone 4), and, as of Milestone 5, Home
+(now the client marketplace) all have business logic; only Inbox
+remains a labeled placeholder, not a dead button — in-app messaging is
+reserved for a later milestone), and three
 Properties screens (list with search/status filters, add, detail). The
 "Add Property" form
 is a single scrollable form covering every field the product spec's
@@ -150,6 +152,53 @@ send.
 See docs/API.md "Client CRM, matching & presentation endpoints" and
 docs/PERMISSIONS.md "Matching architecture" / "Presentation
 authorization" for the full technical detail.
+
+### Publication workflow & client marketplace (Milestone 5)
+
+Milestone 5 is the controlled bridge between the private professional
+database (Milestones 3-4) and the "free to use, no subscription
+required" public marketplace described in the central value proposition
+above:
+
+- **Private by default, always.** Creating a property never
+  automatically publishes it. An agent/company explicitly chooses to
+  prepare and submit a listing; a private property never appears in
+  marketplace search, feeds, favorites, or any public endpoint —
+  enforced structurally (the marketplace's only source of truth is the
+  approved `PropertyPublication` snapshot, which simply has no field for
+  owner/private data) and defensively (business status re-checked on
+  every marketplace query, independent of the publication's own state).
+- **Submit → review → approve**, not self-publish. A professional
+  prepares public-facing content (title, description, price, features,
+  location visibility, photos) — deliberately never the same object as
+  the private property record — and submits it. A platform moderator
+  reviews the exact frozen snapshot (never a live object the professional
+  could quietly edit mid-review) and approves, rejects, or requests
+  changes, each with a preserved reason and timestamp. Approval never
+  transfers ownership: the property stays the workspace's own record.
+- **Versioned, not overwritten.** Editing an already-published listing
+  starts a new review round while the previously-approved version stays
+  live to the public — approval atomically swaps which version the
+  marketplace serves. Nothing the public sees changes without going
+  through the same review.
+- **The marketplace itself**: any authenticated user (client, agent, or
+  company account — browsing has nothing to do with workspace
+  membership) can search/filter/sort approved listings by price, type,
+  purpose, rooms, area, location, and features, view a full listing
+  detail with a photo gallery and safe-by-default location, and save
+  favorites. A listing's location shows only what the professional
+  chose to make public — an approximate city/area by default, exact
+  coordinates only if explicitly opted in.
+- **Reversible moderation, throughout.** A professional can unpublish
+  their own live listing (and republish it later without a new review,
+  since nothing changed); a platform moderator can take a listing down
+  with a reason and restore it later, as long as the property is still
+  genuinely available. Nothing here is a hard delete.
+
+See docs/API.md "Publication, moderation & marketplace endpoints" and
+docs/PERMISSIONS.md "Content moderation lifecycle — property
+publications" / "Marketplace authorization" for the full technical
+detail.
 
 ## Build order
 

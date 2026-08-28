@@ -34,7 +34,7 @@ export async function clearTokens(): Promise<void> {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   auth?: boolean;
   /** multipart/form-data body — pass a pre-built FormData instead of `body`. */

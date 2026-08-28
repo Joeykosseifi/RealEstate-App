@@ -7,3 +7,5 @@ export * from './property';
 export * from './client';
 export * from './matching';
 export * from './presentation';
+export * from './publication';
+export * from './marketplace';

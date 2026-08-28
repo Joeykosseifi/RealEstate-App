@@ -17,8 +17,15 @@ import {
   getProperty,
   updatePropertyLocation,
 } from '../../api/properties';
+import {
+  cancelPublicationSubmission,
+  getPublication,
+  republishListing,
+  unpublishListing,
+} from '../../api/publications';
+import { getPublicationStatusLabel } from '../../publications/publicationStatus';
 import { ApiError } from '../../api/client';
-import type { PropertyDetail } from '../../api/types';
+import type { PropertyDetail, PublicationDetail } from '../../api/types';
 import { MapLocationPicker } from '../../location/MapLocationPicker';
 import {
   initialDraftFromSavedLocation,
@@ -42,18 +49,24 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
   const { propertyId } = route.params;
   const { currentWorkspace } = useAuth();
   const [property, setProperty] = useState<PropertyDetail | null>(null);
+  const [publication, setPublication] = useState<PublicationDetail | null>(null);
   const [primaryImageUrl, setPrimaryImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mapVisible, setMapVisible] = useState(false);
   const [savingLocation, setSavingLocation] = useState(false);
+  const [publicationActionPending, setPublicationActionPending] = useState(false);
 
   const load = useCallback(async () => {
     if (!currentWorkspace) return;
     setError(null);
     try {
-      const detail = await getProperty(currentWorkspace.id, propertyId);
+      const [detail, pub] = await Promise.all([
+        getProperty(currentWorkspace.id, propertyId),
+        getPublication(currentWorkspace.id, propertyId),
+      ]);
       setProperty(detail);
+      setPublication(pub);
       if (detail.primaryMedia) {
         const { url } = await getMediaAccessUrl(
           currentWorkspace.id,
@@ -109,6 +122,37 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
     ]);
   };
 
+  const runPublicationAction = async (
+    action: (workspaceId: string, propertyId: string) => Promise<PublicationDetail>,
+    failureMessage: string,
+  ) => {
+    if (!currentWorkspace) return;
+    setPublicationActionPending(true);
+    try {
+      const updated = await action(currentWorkspace.id, propertyId);
+      setPublication(updated);
+    } catch (err) {
+      Alert.alert(failureMessage, err instanceof ApiError ? err.message : 'Please try again.');
+    } finally {
+      setPublicationActionPending(false);
+    }
+  };
+
+  const onCancelSubmission = () =>
+    runPublicationAction(cancelPublicationSubmission, 'Could not cancel submission');
+
+  const onUnpublish = () =>
+    Alert.alert('Unpublish listing', 'This removes it from the public marketplace. Continue?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Unpublish',
+        style: 'destructive',
+        onPress: () => runPublicationAction(unpublishListing, 'Could not unpublish'),
+      },
+    ]);
+
+  const onRepublish = () => runPublicationAction(republishListing, 'Could not republish');
+
   if (loading) {
     return <ActivityIndicator style={styles.center} />;
   }
@@ -137,6 +181,108 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
       <Text style={styles.status}>
         {property.propertyStatus} · {property.propertyType} · {property.listingPurpose}
       </Text>
+
+      <View style={[styles.section, styles.publicationSection]}>
+        <Text style={styles.sectionTitle}>
+          Marketplace Listing · {getPublicationStatusLabel(publication?.status ?? null)}
+        </Text>
+        {!publication && (
+          <>
+            <Text style={styles.hint}>Private — not prepared for the marketplace yet.</Text>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => navigation.navigate('PublishProperty', { propertyId })}
+            >
+              <Text style={styles.secondaryButtonText}>Prepare Listing</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        {publication?.status === 'DRAFT' && (
+          <>
+            <Text style={styles.hint}>Draft — not yet submitted for review.</Text>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => navigation.navigate('PublishProperty', { propertyId })}
+            >
+              <Text style={styles.secondaryButtonText}>Edit Public Listing</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        {publication?.status === 'PENDING_REVIEW' && (
+          <>
+            <Text style={styles.hint}>Under review by the platform team.</Text>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={onCancelSubmission}
+              disabled={publicationActionPending}
+            >
+              <Text style={styles.secondaryButtonText}>Cancel Submission</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        {publication?.status === 'CHANGES_REQUESTED' && (
+          <>
+            <Text style={styles.warningText}>
+              Changes requested: {publication.changesRequestedReason}
+            </Text>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => navigation.navigate('PublishProperty', { propertyId })}
+            >
+              <Text style={styles.secondaryButtonText}>Edit & Resubmit</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        {publication?.status === 'REJECTED' && (
+          <>
+            <Text style={styles.warningText}>Rejected: {publication.rejectionReason}</Text>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => navigation.navigate('PublishProperty', { propertyId })}
+            >
+              <Text style={styles.secondaryButtonText}>Edit & Resubmit</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        {publication?.status === 'PUBLISHED' && (
+          <>
+            <Text style={styles.hint}>Live on the public marketplace.</Text>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => navigation.navigate('PublishProperty', { propertyId })}
+            >
+              <Text style={styles.secondaryButtonText}>Edit Listing</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.archiveButton}
+              onPress={onUnpublish}
+              disabled={publicationActionPending}
+            >
+              <Text style={styles.archiveButtonText}>Unpublish</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        {publication?.status === 'ADMIN_UNPUBLISHED' && (
+          <Text style={styles.warningText}>
+            Removed by the platform team: {publication.unpublishReason}
+          </Text>
+        )}
+        {publication?.status === 'OWNER_UNPUBLISHED' && (
+          <>
+            <Text style={styles.hint}>Unpublished by you — property stays in your database.</Text>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={onRepublish}
+              disabled={publicationActionPending}
+            >
+              <Text style={styles.secondaryButtonText}>Republish</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        {publication?.status === 'ARCHIVED' && (
+          <Text style={styles.hint}>Archived — no longer eligible for the marketplace.</Text>
+        )}
+      </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Details</Text>
@@ -269,6 +415,21 @@ const styles = StyleSheet.create({
   chipText: { color: '#333', fontSize: 13 },
   ownerBlock: { marginBottom: 8 },
   hint: { color: '#888', fontSize: 12, marginTop: 4 },
+  publicationSection: {
+    backgroundColor: '#f7f9fc',
+    padding: 12,
+    borderRadius: 10,
+  },
+  warningText: { color: '#a15c00', fontSize: 13, marginBottom: 4 },
+  secondaryButton: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#eef4ff',
+  },
+  secondaryButtonText: { color: '#1a73e8', fontWeight: '600' },
   archiveButton: {
     borderWidth: 1,
     borderColor: '#c0392b',

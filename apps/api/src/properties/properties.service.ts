@@ -509,6 +509,67 @@ export class PropertiesService {
       targetId: propertyId,
       metadata: { from: property.propertyStatus, to: newStatus },
     });
+
+    if (newStatus === 'SOLD' || newStatus === 'RENTED') {
+      await this.autoUnpublishIfPublished(propertyId, actorUserId, newStatus);
+    }
+  }
+
+  /**
+   * Milestone 5 business-status safety, layer A (defense layer B is
+   * `MarketplaceService`'s own business-status filter — see
+   * docs/PERMISSIONS.md "Business-status safety"). A property becoming
+   * SOLD/RENTED/ARCHIVED while its listing is `PUBLISHED` is
+   * automatically transitioned so it stops being marketed as available
+   * — attributed to the same actor who changed the business status,
+   * never a silent, unaudited side effect.
+   */
+  private async autoUnpublishIfPublished(
+    propertyId: string,
+    actorUserId: string,
+    reason: 'SOLD' | 'RENTED' | 'ARCHIVED',
+  ): Promise<void> {
+    const publication = await this.prisma.propertyPublication.findUnique({
+      where: { propertyId },
+    });
+    if (!publication || publication.status !== 'PUBLISHED') {
+      return;
+    }
+
+    if (reason === 'ARCHIVED') {
+      await this.prisma.propertyPublication.update({
+        where: { id: publication.id },
+        data: { status: 'ARCHIVED' },
+      });
+      await this.audit.log({
+        actorUserId,
+        action: 'property.publication_updated',
+        targetType: 'PropertyPublication',
+        targetId: publication.id,
+        metadata: { reason: 'property_archived', autoTransition: true },
+      });
+      return;
+    }
+
+    await this.prisma.propertyPublication.update({
+      where: { id: publication.id },
+      data: {
+        status: 'OWNER_UNPUBLISHED',
+        unpublishedAt: new Date(),
+        unpublishedByUserId: actorUserId,
+        unpublishReason: `Automatically unpublished — business status changed to ${reason}.`,
+      },
+    });
+    await this.audit.log({
+      actorUserId,
+      action: 'property.owner_unpublished',
+      targetType: 'PropertyPublication',
+      targetId: publication.id,
+      metadata: {
+        reason: `business_status_${reason.toLowerCase()}`,
+        autoTransition: true,
+      },
+    });
   }
 
   /** Reversible — see `restore()`. Never deletes the row or any related record. */
@@ -539,6 +600,8 @@ export class PropertiesService {
       targetId: propertyId,
       metadata: { previousStatus: property.propertyStatus },
     });
+
+    await this.autoUnpublishIfPublished(propertyId, actorUserId, 'ARCHIVED');
   }
 
   /**

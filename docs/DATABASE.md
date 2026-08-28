@@ -6,7 +6,7 @@
   migration under `prisma/migrations/`. Never mutate the database outside
   of a migration.
 
-## Current state (Milestone 4)
+## Current state (Milestone 5)
 
 Milestone 0 shipped only the `datasource`/`generator` blocks. Milestone 1
 added authentication, users, verification, sessions, and the minimum
@@ -14,11 +14,16 @@ workspace/company/role foundation needed for automatic workspace creation
 on account activation. Milestone 2 built the full workspace/permission
 engine and platform admin authorization. Milestone 3 added the
 professional private property database — `Property` and its related
-models. Milestone 4 (this revision) adds the client CRM (`ClientRecord`),
-per-client property requirements (`ClientRequirement`), a shortlist
-relationship (`ClientPropertyShortlist`), and client-facing PDF
-presentations (`PropertyPresentation`/`PropertyPresentationItem`).
-Matching itself is computed on demand — see "Recalculate matches" below.
+models. Milestone 4 added the client CRM (`ClientRecord`), per-client
+property requirements (`ClientRequirement`), a shortlist relationship
+(`ClientPropertyShortlist`), and client-facing PDF presentations
+(`PropertyPresentation`/`PropertyPresentationItem`). Milestone 5 (this
+revision) adds the publication workflow
+(`PropertyPublication`/`PropertyPublicationVersion`/
+`PropertyPublicationMedia`) that turns a private property into a
+reviewed, versioned, publicly-visible marketplace listing, plus
+client-side `MarketplaceFavorite`. Matching itself is computed on
+demand — see "Recalculate matches" below.
 
 ### Property models (Milestone 3)
 
@@ -104,6 +109,64 @@ Matching itself is computed on demand — see "Recalculate matches" below.
 - **Presentation reorder concurrency.** `PresentationsService.update()` locks the `PropertyPresentation` row (`SELECT ... FOR UPDATE`) before its delete-then-recreate of `PropertyPresentationItem` rows — without this, two concurrent updates naming overlapping item sets can each observe "no existing rows" for a property they're both about to insert under READ COMMITTED, tripping the `(presentationId, propertyId)` unique constraint. Found by `apps/api/test/crm-concurrency.e2e-spec.ts`, fixed with the same row-locking technique `PropertyMediaService.reorder` uses for the identical reason (see Milestone 3 above).
 - **Shortlist duplicate prevention is a database constraint**, not just an application-layer check (`@@unique([clientId, propertyId])`) — verified under real concurrent requests in `apps/api/test/crm-concurrency.e2e-spec.ts`.
 
+### Publication & marketplace models (Milestone 5)
+
+| Model | Purpose |
+|---|---|
+| `PropertyPublication` | One row per property (`propertyId` unique), created lazily on first "prepare listing" call — its absence IS the PRIVATE state (never a stored enum value). Holds the *current lifecycle status* plus two independent version pointers: `latestVersionId` (drafting/reviewing/most-recently-decided) and `publishedVersionId` (currently live to the public) — see "Publication versioning" in docs/PERMISSIONS.md. `workspaceId` is a real relation (not just a denormalized scalar), unlike some other Milestone 3/4 "actor reference" fields, because the admin queue genuinely needs to join workspace name without an extra query. |
+| `PropertyPublicationVersion` | Append-only, one row per submission — immutable from the moment it leaves `DRAFT` status (enforced in `PublicationsService`, not a DB trigger). Contains ONLY explicit public-safe allowlisted fields (`publicTitle`/`publicPrice`/`publicFeatureKeys`/etc.) — never a foreign key back to `Property`/`PropertyOwner`/`PropertyPrivateDetails`, so it is structurally impossible for a review/admin/marketplace query starting from this table to reach sensitive data. Doubles as the review-history record (no separate audit-only table needed). |
+| `PropertyPublicationMedia` | Explicit public-media allowlist — one row per `(versionId, propertyMediaId)` selection, with `sortOrder`/`isMain`. Deleting a selection never deletes the underlying `PropertyMedia` row (`onDelete: Cascade` only runs the other direction, when the version or the media itself is deleted). |
+| `MarketplaceFavorite` | `(userId, publicationId)` — favorites the publication (marketplace content), never the private `Property`. `@@unique([userId, publicationId])` at the database level, mirroring the shortlist pattern. |
+
+### Design decisions worth knowing (Milestone 5)
+
+- **Absence-of-row as a state value.** `PRIVATE` (the spec's first
+  publication status) is never written to the database — a property with
+  no `PropertyPublication` row at all IS private. This avoids a
+  meaningless "create a row just to say nothing has happened yet" step
+  and keeps the enum limited to states that represent an actual event.
+- **Two version pointers, not one.** A single `currentVersionId` would
+  force a choice between "show the admin/public what's actually live"
+  and "show the professional what they're currently editing" whenever
+  those diverge (a pending edit on top of an already-published listing).
+  `latestVersionId` and `publishedVersionId` are separate, atomically-updated
+  pointers so both can be true at once — see docs/PERMISSIONS.md
+  "Publication versioning" for the full rationale, including the real
+  bug this design decision fixed (`publication-security.e2e-spec.ts`
+  test 11: an edit-in-review was making the marketplace endpoint 404 the
+  still-live older version, because the marketplace query was originally
+  keyed on `status === 'PUBLISHED'` rather than "has a
+  `publishedVersionId` and hasn't been taken down").
+- **No separate audit/history table for publications.** Because every
+  submission is its own immutable `PropertyPublicationVersion` row
+  (never updated once past `DRAFT`), the version table itself already IS
+  the append-only review history — querying
+  `PropertyPublication.versions` ordered by `versionNumber` gives the
+  complete submit → decide → resubmit timeline with no additional model.
+- **Publication row-locking for moderation races.** `AdminPublicationsService`
+  locks the `PropertyPublication` row (`SELECT ... FOR UPDATE`) before
+  reading its current status and applying any decision (approve/reject/
+  request-changes/unpublish/restore) — the same technique Milestone 3's
+  `PropertyMediaService.reorder` and Milestone 4's
+  `PresentationsService.update()` use. Verified in
+  `apps/api/test/publication-concurrency.e2e-spec.ts`: two concurrent
+  decisions on the same publication (approve-vs-approve, approve-vs-reject)
+  always resolve to exactly one 200 and one 409, never both succeeding
+  or a corrupted mixed state.
+- **Business-status safety is two independent layers**, not one:
+  `PropertiesService` auto-transitions the publication when the
+  underlying property becomes SOLD/RENTED/ARCHIVED (layer A), and
+  `MarketplaceService`'s query independently re-checks business status
+  on every read (layer B) — see docs/PERMISSIONS.md "Business-status
+  safety" for why both are required.
+- **No separate PDF-style "snapshot as rendered artifact."** Unlike
+  Milestone 4's presentations (where the generated PDF binary IS the
+  historical snapshot), a publication's "snapshot" is the
+  `PropertyPublicationVersion` row itself — there's no equivalent
+  rendered-artifact step, since the same structured data is read
+  directly by the professional preview, the admin review UI, and the
+  public marketplace (see docs/API.md "Publication preview").
+
 ### Models
 
 | Model | Purpose |
@@ -181,8 +244,8 @@ exercise this directly.
 | 2 | ✅ `UserPlatformRole`; `Role`/`Permission` scope split; full workspace management + admin authorization API |
 | 3 | ✅ `Property`, `PropertyLocation`, `PropertyFeature`, `PropertyMedia`, `PropertyOwner`, `PropertyPrivateDetails` |
 | 4 | ✅ `ClientRecord`, `ClientRequirement`, `ClientPropertyShortlist`, `PropertyPresentation`, `PropertyPresentationItem` (no match-result table — matching is computed on demand) |
-| 5 | Publication review/moderation records |
-| 6 | Client favorites, public marketplace read models |
+| 5 | ✅ `PropertyPublication`, `PropertyPublicationVersion`, `PropertyPublicationMedia`, `MarketplaceFavorite` (client marketplace pulled forward into this milestone alongside publication/moderation, ahead of the original Milestone 6 slot) |
+| 6 | (marketplace already delivered in Milestone 5 — remaining client-facing scope folds into later milestones as needed) |
 | 7 | `Conversation`, `Message`, `Viewing` |
 | 8 | Company employee invitations, team roles |
 | 9 | `Collaboration`, collaboration permissions, commission agreements |

@@ -14,6 +14,8 @@ import { StorageModule } from './storage/storage.module';
 import { PropertiesModule } from './properties/properties.module';
 import { ClientsModule } from './clients/clients.module';
 import { PresentationsModule } from './presentations/presentations.module';
+import { PublicationsModule } from './publications/publications.module';
+import { MarketplaceModule } from './marketplace/marketplace.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -44,6 +46,8 @@ import { AppService } from './app.service';
     PropertiesModule,
     ClientsModule,
     PresentationsModule,
+    PublicationsModule,
+    MarketplaceModule,
   ],
   controllers: [AppController],
   providers: [

@@ -112,8 +112,8 @@ linted, security-reviewed, and documented before the next begins.
 | 2 | Workspaces, memberships, roles, permissions, authorization | ✅ |
 | 3 | Agent property database (location, media, owner info, search) | ✅ |
 | 4 | CRM, requirements, matching, presentations/PDFs | ✅ |
-| 5 | Publication workflow & admin moderation | ⬜ |
-| 6 | Client marketplace, search, favorites, public profiles | ⬜ |
+| 5 | Publication workflow, admin moderation & client marketplace (search, favorites) | ✅ |
+| 6 | Public agent/company profile pages | ⬜ |
 | 7 | Conversations, messages, viewings, notifications | ⬜ |
 | 8 | Company workspace, employee accounts, team management | ⬜ |
 | 9 | Freelance/company collaboration & commission agreements | ⬜ |

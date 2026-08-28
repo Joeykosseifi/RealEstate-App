@@ -297,3 +297,150 @@ export interface PropertyPresentationSummary {
 export interface PropertyPresentationDetail extends PropertyPresentationSummary {
   items: PropertyPresentationItemDetail[];
 }
+
+// ---------------------------------------------------------------------------
+// Milestone 5 — Publication workflow & client marketplace
+// ---------------------------------------------------------------------------
+
+export type PropertyPublicationStatus =
+  | 'DRAFT'
+  | 'PENDING_REVIEW'
+  | 'CHANGES_REQUESTED'
+  | 'PUBLISHED'
+  | 'REJECTED'
+  | 'ADMIN_UNPUBLISHED'
+  | 'OWNER_UNPUBLISHED'
+  | 'ARCHIVED';
+
+export type PropertyPublicationVersionStatus =
+  'DRAFT' | 'PENDING_REVIEW' | 'CHANGES_REQUESTED' | 'APPROVED' | 'REJECTED';
+
+export type PropertyLocationVisibility =
+  'PRIVATE' | 'WORKSPACE' | 'PUBLIC_APPROXIMATE' | 'PUBLIC_EXACT';
+
+export interface PublicationMediaSelection {
+  id: string;
+  propertyMediaId: string;
+  sortOrder: number;
+  isMain: boolean;
+  url: string | null;
+}
+
+export interface PublicationSnapshot {
+  publicTitle: string;
+  publicDescription: string | null;
+  publicPrice: number;
+  currency: string;
+  propertyType: PropertyType;
+  listingPurpose: ListingPurpose;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  areaSqm: number | null;
+  publicFeatureKeys: string[];
+  locationVisibility: PropertyLocationVisibility;
+  publicCountry: string | null;
+  publicCity: string | null;
+  publicArea: string | null;
+  publicLatitude: number | null;
+  publicLongitude: number | null;
+  media: PublicationMediaSelection[];
+}
+
+export interface PublicationHistoryEntry {
+  id: string;
+  versionNumber: number;
+  status: PropertyPublicationVersionStatus;
+  submittedByUserId: string | null;
+  submittedAt: string | null;
+  reviewedByUserId: string | null;
+  reviewedAt: string | null;
+  reviewReason: string | null;
+  createdAt: string;
+}
+
+export interface PublicationDetail {
+  id: string;
+  propertyId: string;
+  workspaceId: string;
+  status: PropertyPublicationStatus;
+  latestVersionNumber: number;
+  latestVersionStatus: PropertyPublicationVersionStatus;
+  snapshot: PublicationSnapshot;
+  submittedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  rejectionReason: string | null;
+  changesRequestedAt: string | null;
+  changesRequestedReason: string | null;
+  publishedAt: string | null;
+  unpublishedAt: string | null;
+  unpublishReason: string | null;
+  history: PublicationHistoryEntry[];
+}
+
+export interface PublicationReviewSummary {
+  id: string;
+  propertyId: string;
+  workspaceId: string;
+  workspaceName: string;
+  status: PropertyPublicationStatus;
+  latestVersionNumber: number;
+  propertyType: PropertyType;
+  listingPurpose: ListingPurpose;
+  publicTitle: string;
+  publicPrice: number;
+  currency: string;
+  submittedByUserId: string | null;
+  submittedAt: string | null;
+}
+
+export interface PublicLocation {
+  country: string | null;
+  city: string | null;
+  area: string | null;
+  exactLatitude?: number;
+  exactLongitude?: number;
+}
+
+export interface PublicMedia {
+  id: string;
+  url: string | null;
+  sortOrder: number;
+  isMain: boolean;
+}
+
+export interface PublicListingIdentity {
+  workspaceType: 'PERSONAL' | 'COMPANY';
+  displayName: string;
+  logoUrl: string | null;
+}
+
+export interface PublicPropertyListItem {
+  publicationId: string;
+  title: string;
+  price: number;
+  currency: string;
+  propertyType: PropertyType;
+  listingPurpose: ListingPurpose;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  areaSqm: number | null;
+  location: PublicLocation;
+  mainImage: PublicMedia | null;
+  identity: PublicListingIdentity;
+  publishedAt: string;
+  isFavorited?: boolean;
+}
+
+export interface PublicPropertyDetail extends PublicPropertyListItem {
+  description: string | null;
+  featureKeys: string[];
+  media: PublicMedia[];
+}
+
+export interface MarketplaceFavoriteItem {
+  id: string;
+  publicationId: string;
+  createdAt: string;
+  listing: PublicPropertyListItem | null;
+}

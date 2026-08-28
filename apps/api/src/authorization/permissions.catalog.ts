@@ -179,6 +179,10 @@ export const PERMISSIONS = {
     'admin.content.view',
     'View public/business content for moderation',
   ),
+  ADMIN_CONTENT_REVIEW: platformPermission(
+    'admin.content.review',
+    'Approve, reject, or request changes on a publication submission',
+  ),
   ADMIN_CONTENT_UNPUBLISH: platformPermission(
     'admin.content.unpublish',
     'Unpublish public content',
