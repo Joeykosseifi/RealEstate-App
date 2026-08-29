@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,9 +14,9 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { addFavorite, getMarketplaceListing, removeFavorite } from '../../api/marketplace';
 import { ApiError } from '../../api/client';
 import type { PublicPropertyDetail } from '../../api/types';
-import type { MarketplaceStackParamList } from '../../navigation/MarketplaceStack';
+import type { MarketplaceDetailParamList } from '../../navigation/client/marketplaceDetailParams';
 
-type Props = NativeStackScreenProps<MarketplaceStackParamList, 'MarketplaceDetail'>;
+type Props = NativeStackScreenProps<MarketplaceDetailParamList, 'MarketplaceDetail'>;
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -78,10 +79,37 @@ export function MarketplaceDetailScreen({ route }: Props): React.JSX.Element {
     }
   };
 
-  const onContactAgent = () => {
+  /**
+   * V1 deliberately has no in-app messaging (see docs/PRODUCT.md
+   * "Contact-professional flow") — these are real `tel:`/`mailto:`/
+   * `wa.me` deep links into the device's own phone/mail/WhatsApp apps,
+   * using only the workspace's explicit, opt-in public contact info
+   * (never the private owner's contact — see PublicListingIdentity).
+   */
+  const openLink = async (url: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Could not open', 'Please try again.');
+    }
+  };
+
+  const onCall = () => {
+    if (listing?.identity.contactPhone) void openLink(`tel:${listing.identity.contactPhone}`);
+  };
+  const onEmail = () => {
+    if (listing?.identity.contactEmail) void openLink(`mailto:${listing.identity.contactEmail}`);
+  };
+  const onWhatsApp = () => {
+    if (!listing?.identity.contactWhatsapp) return;
+    const digits = listing.identity.contactWhatsapp.replace(/[^\d]/g, '');
+    void openLink(`https://wa.me/${digits}`);
+  };
+
+  const onNoContactFallback = () => {
     Alert.alert(
       "I'm Interested",
-      'Direct messaging is coming in a future update. We saved this listing to your Favorites so you can find it and follow up.',
+      'This professional has not added direct contact info yet. We saved this listing to your Favorites so you can find it and follow up.',
     );
     if (listing && !listing.isFavorited) {
       void toggleFavorite();
@@ -186,9 +214,34 @@ export function MarketplaceDetailScreen({ route }: Props): React.JSX.Element {
         <Text style={styles.description}>{listing.identity.displayName}</Text>
       </View>
 
-      <TouchableOpacity style={styles.primaryButton} onPress={onContactAgent}>
-        <Text style={styles.primaryButtonText}>I'm Interested</Text>
-      </TouchableOpacity>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Contact</Text>
+        {listing.identity.contactPhone ||
+        listing.identity.contactWhatsapp ||
+        listing.identity.contactEmail ? (
+          <View style={styles.contactRow}>
+            {listing.identity.contactPhone && (
+              <TouchableOpacity style={styles.contactButton} onPress={onCall}>
+                <Text style={styles.contactButtonText}>Call</Text>
+              </TouchableOpacity>
+            )}
+            {listing.identity.contactWhatsapp && (
+              <TouchableOpacity style={styles.contactButton} onPress={onWhatsApp}>
+                <Text style={styles.contactButtonText}>WhatsApp</Text>
+              </TouchableOpacity>
+            )}
+            {listing.identity.contactEmail && (
+              <TouchableOpacity style={styles.contactButton} onPress={onEmail}>
+                <Text style={styles.contactButtonText}>Email</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.primaryButton} onPress={onNoContactFallback}>
+            <Text style={styles.primaryButtonText}>I'm Interested</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </ScrollView>
   );
 }
@@ -241,4 +294,13 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   primaryButtonText: { color: '#fff', fontWeight: '700' },
+  contactRow: { flexDirection: 'row', gap: 8 },
+  contactButton: {
+    flex: 1,
+    backgroundColor: '#1a73e8',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  contactButtonText: { color: '#fff', fontWeight: '700' },
 });

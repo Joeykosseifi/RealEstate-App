@@ -1,19 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { searchMarketplace } from '../../api/marketplace';
 import type { PublicPropertyListItem } from '../../api/types';
-import type { MarketplaceStackParamList } from '../../navigation/MarketplaceStack';
+import type { HomeStackParamList } from '../../navigation/client/HomeStack';
 import { ListingCard } from './ListingCard';
 
-type Props = NativeStackScreenProps<MarketplaceStackParamList, 'MarketplaceHome'>;
+type Props = NativeStackScreenProps<HomeStackParamList, 'MarketplaceHome'>;
 
 function ListingRail({
   title,
@@ -99,20 +92,6 @@ export function MarketplaceHomeScreen({ navigation }: Props): React.JSX.Element 
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Marketplace</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={() => navigation.navigate('MarketplaceSearch', undefined)}
-          >
-            <Text style={styles.headerButtonText}>Search</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={() => navigation.navigate('Favorites')}
-          >
-            <Text style={styles.headerButtonText}>Favorites</Text>
-          </TouchableOpacity>
-        </View>
       </View>
 
       {error ? (
@@ -158,14 +137,6 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   headerTitle: { fontSize: 22, fontWeight: '700' },
-  headerActions: { flexDirection: 'row', gap: 8 },
-  headerButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#eef4ff',
-  },
-  headerButtonText: { color: '#1a73e8', fontWeight: '600', fontSize: 13 },
   railSection: { marginBottom: 20 },
   railTitle: { fontSize: 16, fontWeight: '600', marginHorizontal: 16, marginBottom: 10 },
   railContent: { paddingHorizontal: 16, gap: 12 },

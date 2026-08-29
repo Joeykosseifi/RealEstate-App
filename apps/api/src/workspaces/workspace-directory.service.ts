@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import type {
   Paginated,
   WorkspaceMemberSummary,
@@ -10,6 +11,7 @@ import {
   toWorkspaceSummary,
 } from './workspace.mapper';
 import type { ListWorkspaceMembersQueryDto } from './dto/list-workspace-members-query.dto';
+import type { UpdateWorkspaceContactDto } from './dto/update-workspace-contact.dto';
 
 /**
  * Read-only workspace queries: the "which workspaces can I switch into"
@@ -66,5 +68,32 @@ export class WorkspaceDirectoryService {
         totalPages: Math.ceil(totalItems / pageSize),
       },
     };
+  }
+
+  /**
+   * Updates the workspace's public marketplace contact info. An empty
+   * string clears a field (stored as `null`); an omitted field is left
+   * untouched. `workspaceId` is always resolved server-side from an
+   * already-authorized membership — see `listMembers`'s doc comment.
+   */
+  async updateContact(
+    workspaceId: string,
+    dto: UpdateWorkspaceContactDto,
+  ): Promise<void> {
+    const data: Prisma.WorkspaceUpdateInput = {};
+    if (dto.publicContactPhone !== undefined) {
+      data.publicContactPhone = dto.publicContactPhone.trim() || null;
+    }
+    if (dto.publicContactEmail !== undefined) {
+      data.publicContactEmail =
+        dto.publicContactEmail.trim().toLowerCase() || null;
+    }
+    if (dto.publicContactWhatsapp !== undefined) {
+      data.publicContactWhatsapp = dto.publicContactWhatsapp.trim() || null;
+    }
+    if (Object.keys(data).length === 0) {
+      return;
+    }
+    await this.prisma.workspace.update({ where: { id: workspaceId }, data });
   }
 }

@@ -1,38 +1,18 @@
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { PlaceholderScreen } from '../screens/PlaceholderScreen';
-import { MoreScreen } from '../screens/MoreScreen';
-import { PropertiesStack } from './PropertiesStack';
-import { ClientsStack } from './ClientsStack';
-import { MarketplaceStack } from './MarketplaceStack';
-
-export type MainTabParamList = {
-  Home: undefined;
-  Properties: undefined;
-  Clients: undefined;
-  Inbox: undefined;
-  More: undefined;
-};
-
-const Tab = createBottomTabNavigator<MainTabParamList>();
+import { useAuth } from '../auth/AuthContext';
+import { ClientTabs } from './client/ClientTabs';
+import { ProfessionalTabs } from './professional/ProfessionalTabs';
 
 /**
- * The five-tab shell described in the Milestone 3 spec. Clients was
- * wired to real business functionality in Milestone 4 (CRM,
- * requirements, matching, shortlist, presentations); Home is now the
- * client marketplace (Milestone 5: browse/search/favorite published
- * listings). Inbox remains a deliberate placeholder (see
- * docs/PRODUCT.md) — in-app messaging is reserved for a later
- * milestone — not a dead button: it renders a real screen explaining
- * what's coming, rather than doing nothing when tapped.
+ * Role-aware navigation root (see docs/PRODUCT.md "Role-aware
+ * navigation"). A CLIENT account never has a workspace of its own (see
+ * docs/DATABASE.md) and gets the marketplace-only `ClientTabs`; an
+ * AGENT or COMPANY member gets the CRM-oriented `ProfessionalTabs` —
+ * accountType, not workspace presence, is the authoritative signal
+ * (mirrors the backend's own registration split), so a professional who
+ * hasn't finished onboarding still lands on their own navigation shape
+ * rather than being misclassified as a client.
  */
 export function MainTabs(): React.JSX.Element {
-  return (
-    <Tab.Navigator screenOptions={{ headerShown: false }}>
-      <Tab.Screen name="Home" component={MarketplaceStack} options={{ headerShown: false }} />
-      <Tab.Screen name="Properties" component={PropertiesStack} options={{ headerShown: false }} />
-      <Tab.Screen name="Clients" component={ClientsStack} options={{ headerShown: false }} />
-      <Tab.Screen name="Inbox" children={() => <PlaceholderScreen title="Inbox" />} />
-      <Tab.Screen name="More" component={MoreScreen} options={{ headerShown: true }} />
-    </Tab.Navigator>
-  );
+  const { user } = useAuth();
+  return user?.accountType === 'CLIENT' ? <ClientTabs /> : <ProfessionalTabs />;
 }

@@ -133,12 +133,19 @@ linted, security-reviewed, and documented before the next begins.
 | 3 | Agent property database (location, media, owner info, search) | ✅ |
 | 4 | CRM, requirements, matching, presentations/PDFs | ✅ |
 | 5 | Publication workflow, admin moderation & client marketplace (search, favorites) | ✅ |
-| 6 | Public agent/company profile pages | ⬜ |
-| 7 | Conversations, messages, viewings, notifications | ⬜ |
-| 8 | Company workspace, employee accounts, team management | ⬜ |
-| 9 | Freelance/company collaboration & commission agreements | ⬜ |
-| 10 | Subscriptions, payments, plan limits | ⬜ |
-| 11 | Security hardening, audit logging, performance, production readiness | ⬜ |
+| 6 | Core product completion & UX (role-aware navigation, real dashboard, contact-professional, workflow/UX polish) | ✅ |
+| 7 | Design system & full UI polish | ⬜ |
+| 8 | Conversations, messages, viewings, notifications | ⬜ |
+| 9 | Company workspace, employee accounts, team management | ⬜ |
+| 10 | Freelance/company collaboration & commission agreements | ⬜ |
+| 11 | Subscriptions, payments, plan limits | ⬜ |
+| 12 | Public agent/company profile pages | ⬜ |
+| 13 | Security hardening, audit logging, performance, production readiness | ⬜ |
+
+Milestone 6 superseded the originally-planned "public agent/company
+profile pages" milestone — the product was re-scoped toward reaching a
+usable V1 beta faster; public profile pages are deferred to milestone
+12 above.
 
 ## Contributing conventions
 

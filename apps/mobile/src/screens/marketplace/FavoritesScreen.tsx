@@ -3,10 +3,10 @@ import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-nativ
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { listFavorites } from '../../api/marketplace';
 import type { MarketplaceFavoriteItem } from '../../api/types';
-import type { MarketplaceStackParamList } from '../../navigation/MarketplaceStack';
+import type { FavoritesStackParamList } from '../../navigation/client/FavoritesStack';
 import { ListingCard } from './ListingCard';
 
-type Props = NativeStackScreenProps<MarketplaceStackParamList, 'Favorites'>;
+type Props = NativeStackScreenProps<FavoritesStackParamList, 'FavoritesList'>;
 
 /**
  * Marketplace favorites — distinct from the professional CRM shortlist

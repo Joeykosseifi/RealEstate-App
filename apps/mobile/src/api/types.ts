@@ -35,6 +35,10 @@ export interface WorkspaceSummary {
 /** `GET /workspaces/:id` — the one workspace endpoint that also returns the caller's resolved permission set. */
 export interface WorkspaceDetail extends WorkspaceSummary {
   permissions: string[];
+  /** Explicit, opt-in public contact info shown on this workspace's published listings — never a private login email/phone. */
+  publicContactPhone: string | null;
+  publicContactEmail: string | null;
+  publicContactWhatsapp: string | null;
 }
 
 export interface PaginatedResponse<T> {
@@ -413,6 +417,9 @@ export interface PublicListingIdentity {
   workspaceType: 'PERSONAL' | 'COMPANY';
   displayName: string;
   logoUrl: string | null;
+  contactPhone?: string;
+  contactEmail?: string;
+  contactWhatsapp?: string;
 }
 
 export interface PublicPropertyListItem {
@@ -443,4 +450,29 @@ export interface MarketplaceFavoriteItem {
   publicationId: string;
   createdAt: string;
   listing: PublicPropertyListItem | null;
+}
+
+// ---------------------------------------------------------------------------
+// Milestone 6 — Professional dashboard
+// ---------------------------------------------------------------------------
+
+export interface PropertyDashboardSummary {
+  total: number;
+  byBusinessStatus: Record<PropertyBusinessStatus, number>;
+  private: number;
+  published: number;
+  pendingReview: number;
+  recent: PropertyListItem[];
+}
+
+export interface ClientDashboardSummary {
+  total: number;
+  activeRequirements: number;
+  recent: ClientListItem[];
+}
+
+/** A section is present only when the caller holds the matching view permission — never a zeroed-out placeholder. */
+export interface WorkspaceDashboard {
+  properties?: PropertyDashboardSummary;
+  clients?: ClientDashboardSummary;
 }

@@ -104,8 +104,15 @@ export function ClientDetailScreen({ route, navigation }: Props): React.JSX.Elem
           text: 'Archive',
           style: 'destructive',
           onPress: async () => {
-            await archiveRequirement(currentWorkspace.id, clientId, requirementId);
-            void load();
+            try {
+              await archiveRequirement(currentWorkspace.id, clientId, requirementId);
+              void load();
+            } catch (err) {
+              Alert.alert(
+                'Could not archive',
+                err instanceof ApiError ? err.message : 'Please try again.',
+              );
+            }
           },
         },
       ],

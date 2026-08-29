@@ -21,5 +21,6 @@ import { ShortlistService } from './shortlist.service';
     MatchingService,
     ShortlistService,
   ],
+  exports: [ClientsService],
 })
 export class ClientsModule {}

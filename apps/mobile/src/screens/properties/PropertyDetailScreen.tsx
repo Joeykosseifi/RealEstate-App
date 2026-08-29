@@ -9,13 +9,16 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../auth/AuthContext';
 import {
   archiveProperty,
   getMediaAccessUrl,
   getProperty,
+  restoreProperty,
   updatePropertyLocation,
+  uploadPropertyMedia,
 } from '../../api/properties';
 import {
   cancelPublicationSubmission,
@@ -47,15 +50,18 @@ function Row({ label, value }: { label: string; value: string }) {
 
 export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.Element {
   const { propertyId } = route.params;
-  const { currentWorkspace } = useAuth();
+  const { currentWorkspace, permissions } = useAuth();
   const [property, setProperty] = useState<PropertyDetail | null>(null);
   const [publication, setPublication] = useState<PublicationDetail | null>(null);
   const [primaryImageUrl, setPrimaryImageUrl] = useState<string | null>(null);
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mapVisible, setMapVisible] = useState(false);
   const [savingLocation, setSavingLocation] = useState(false);
   const [publicationActionPending, setPublicationActionPending] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [restoring, setRestoring] = useState(false);
 
   const load = useCallback(async () => {
     if (!currentWorkspace) return;
@@ -75,6 +81,20 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
         );
         setPrimaryImageUrl(url);
       }
+      const images = detail.media.filter((m) => m.mediaType === 'IMAGE');
+      const resolved = await Promise.all(
+        images.map(async (media) => {
+          try {
+            const { url } = await getMediaAccessUrl(currentWorkspace.id, propertyId, media.id);
+            return [media.id, url] as const;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      setPhotoUrls(
+        Object.fromEntries(resolved.filter((entry): entry is [string, string] => entry !== null)),
+      );
     } catch {
       setError('Could not load this property.');
     } finally {
@@ -115,11 +135,71 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
         text: 'Archive',
         style: 'destructive',
         onPress: async () => {
-          await archiveProperty(currentWorkspace.id, propertyId);
-          navigation.goBack();
+          try {
+            await archiveProperty(currentWorkspace.id, propertyId);
+            navigation.goBack();
+          } catch (err) {
+            Alert.alert(
+              'Could not archive',
+              err instanceof ApiError ? err.message : 'Please try again.',
+            );
+          }
         },
       },
     ]);
+  };
+
+  const onRestore = async () => {
+    if (!currentWorkspace) return;
+    setRestoring(true);
+    try {
+      await restoreProperty(currentWorkspace.id, propertyId);
+      await load();
+    } catch (err) {
+      Alert.alert('Could not restore', err instanceof ApiError ? err.message : 'Please try again.');
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  const onAddPhoto = async () => {
+    if (!currentWorkspace) return;
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(
+        'Photo access needed',
+        'Allow photo library access in Settings to add property photos.',
+      );
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      quality: 0.8,
+    });
+    if (result.canceled || result.assets.length === 0) return;
+
+    const asset = result.assets[0];
+    setUploadingPhoto(true);
+    try {
+      await uploadPropertyMedia(
+        currentWorkspace.id,
+        propertyId,
+        {
+          uri: asset.uri,
+          name: asset.fileName ?? `photo-${Date.now()}.jpg`,
+          type: asset.mimeType ?? 'image/jpeg',
+        },
+        'IMAGE',
+      );
+      await load();
+    } catch (err) {
+      Alert.alert(
+        'Could not upload photo',
+        err instanceof ApiError ? err.message : 'Please try again.',
+      );
+    } finally {
+      setUploadingPhoto(false);
+    }
   };
 
   const runPublicationAction = async (
@@ -174,13 +254,30 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
         </View>
       )}
 
-      <Text style={styles.title}>{property.title}</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>{property.title}</Text>
+        {permissions.has('property.edit') && property.propertyStatus !== 'ARCHIVED' && (
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={() => navigation.navigate('EditProperty', { propertyId })}
+          >
+            <Text style={styles.editButtonText}>Edit</Text>
+          </TouchableOpacity>
+        )}
+      </View>
       <Text style={styles.price}>
         {property.currency} {property.price.toLocaleString()}
       </Text>
       <Text style={styles.status}>
         {property.propertyStatus} · {property.propertyType} · {property.listingPurpose}
       </Text>
+      {property.propertyStatus === 'ARCHIVED' && (
+        <View style={styles.archivedBanner}>
+          <Text style={styles.archivedBannerText}>
+            This property is archived — it no longer appears in your active list.
+          </Text>
+        </View>
+      )}
 
       <View style={[styles.section, styles.publicationSection]}>
         <Text style={styles.sectionTitle}>
@@ -294,6 +391,44 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
         ) : null}
       </View>
 
+      {property.propertyStatus !== 'ARCHIVED' && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Photos</Text>
+          {property.media.filter((m) => m.mediaType === 'IMAGE').length === 0 ? (
+            <Text style={styles.hint}>No photos yet.</Text>
+          ) : (
+            <View style={styles.photoRow}>
+              {property.media
+                .filter((m) => m.mediaType === 'IMAGE')
+                .map((media) =>
+                  photoUrls[media.id] ? (
+                    <Image
+                      key={media.id}
+                      source={{ uri: photoUrls[media.id] }}
+                      style={styles.photoThumb}
+                    />
+                  ) : (
+                    <View key={media.id} style={[styles.photoThumb, styles.imagePlaceholder]} />
+                  ),
+                )}
+            </View>
+          )}
+          {permissions.has('property.edit') && (
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => void onAddPhoto()}
+              disabled={uploadingPhoto}
+            >
+              {uploadingPhoto ? (
+                <ActivityIndicator color="#1a73e8" />
+              ) : (
+                <Text style={styles.secondaryButtonText}>Add Photo</Text>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       {property.features.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Features</Text>
@@ -359,9 +494,24 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
         </View>
       )}
 
-      <TouchableOpacity style={styles.archiveButton} onPress={onArchive}>
-        <Text style={styles.archiveButtonText}>Archive Property</Text>
-      </TouchableOpacity>
+      {permissions.has('property.archive') &&
+        (property.propertyStatus === 'ARCHIVED' ? (
+          <TouchableOpacity
+            style={styles.restoreButton}
+            onPress={() => void onRestore()}
+            disabled={restoring}
+          >
+            {restoring ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.restoreButtonText}>Restore Property</Text>
+            )}
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.archiveButton} onPress={onArchive}>
+            <Text style={styles.archiveButtonText}>Archive Property</Text>
+          </TouchableOpacity>
+        ))}
 
       {property.location && (
         <MapLocationPicker
@@ -394,7 +544,15 @@ const styles = StyleSheet.create({
   },
   imagePlaceholder: { alignItems: 'center', justifyContent: 'center' },
   imagePlaceholderText: { color: '#999' },
-  title: { fontSize: 22, fontWeight: '700' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  title: { fontSize: 22, fontWeight: '700', flexShrink: 1 },
+  editButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#eef4ff',
+  },
+  editButtonText: { color: '#1a73e8', fontWeight: '600', fontSize: 13 },
   price: { fontSize: 20, fontWeight: '600', color: '#1a73e8', marginTop: 4 },
   status: { color: '#666', marginTop: 4, marginBottom: 16 },
   section: { marginBottom: 20 },
@@ -439,6 +597,23 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   archiveButtonText: { color: '#c0392b', fontWeight: '600' },
+  restoreButton: {
+    backgroundColor: '#1a73e8',
+    borderRadius: 8,
+    padding: 14,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  restoreButtonText: { color: '#fff', fontWeight: '600' },
+  archivedBanner: {
+    backgroundColor: '#fdf1e7',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12,
+  },
+  archivedBannerText: { color: '#a15c00', fontSize: 13 },
+  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  photoThumb: { width: 72, height: 72, borderRadius: 8, backgroundColor: '#eee' },
   editLocationButton: {
     alignSelf: 'flex-start',
     marginTop: 8,

@@ -7,5 +7,6 @@ import { PropertyMediaService } from './property-media.service';
 @Module({
   controllers: [PropertiesController, PropertyMediaController],
   providers: [PropertiesService, PropertyMediaService],
+  exports: [PropertiesService],
 })
 export class PropertiesModule {}

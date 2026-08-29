@@ -18,6 +18,16 @@ export interface WorkspaceSummary {
 export interface WorkspaceDetail extends WorkspaceSummary {
   /** The requesting user's own resolved permissions in this workspace. */
   permissions: string[];
+  /** Explicit, opt-in public contact info shown on this workspace's published listings — see docs/PERMISSIONS.md "Public professional contact". */
+  publicContactPhone: string | null;
+  publicContactEmail: string | null;
+  publicContactWhatsapp: string | null;
+}
+
+export interface UpdateWorkspaceContactInput {
+  publicContactPhone?: string | null;
+  publicContactEmail?: string | null;
+  publicContactWhatsapp?: string | null;
 }
 
 export interface WorkspaceMemberSummary {

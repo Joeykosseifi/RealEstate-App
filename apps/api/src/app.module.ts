@@ -16,6 +16,7 @@ import { ClientsModule } from './clients/clients.module';
 import { PresentationsModule } from './presentations/presentations.module';
 import { PublicationsModule } from './publications/publications.module';
 import { MarketplaceModule } from './marketplace/marketplace.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -48,6 +49,7 @@ import { AppService } from './app.service';
     PresentationsModule,
     PublicationsModule,
     MarketplaceModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [

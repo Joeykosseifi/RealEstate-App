@@ -104,6 +104,12 @@ export function archiveProperty(workspaceId: string, propertyId: string): Promis
   });
 }
 
+export function restoreProperty(workspaceId: string, propertyId: string): Promise<void> {
+  return apiRequest(`/workspaces/${workspaceId}/properties/${propertyId}/restore`, {
+    method: 'POST',
+  });
+}
+
 export function changePropertyStatus(
   workspaceId: string,
   propertyId: string,

@@ -35,6 +35,7 @@ import { ChangeMemberRoleDto } from './dto/change-member-role.dto';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { ListWorkspaceMembersQueryDto } from './dto/list-workspace-members-query.dto';
+import { UpdateWorkspaceContactDto } from './dto/update-workspace-contact.dto';
 
 @Controller('workspaces')
 export class WorkspacesController {
@@ -67,7 +68,20 @@ export class WorkspacesController {
       roleKey: workspaceContext.roleKey,
       createdAt: workspaceContext.workspace.createdAt.toISOString(),
       permissions: [...workspaceContext.permissions],
+      publicContactPhone: workspaceContext.workspace.publicContactPhone,
+      publicContactEmail: workspaceContext.workspace.publicContactEmail,
+      publicContactWhatsapp: workspaceContext.workspace.publicContactWhatsapp,
     };
+  }
+
+  @Patch(':id/contact')
+  @RequireWorkspacePermission(PERMISSIONS.WORKSPACE_UPDATE.key)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async updateContact(
+    @CurrentWorkspace() workspaceContext: WorkspaceContext,
+    @Body() dto: UpdateWorkspaceContactDto,
+  ): Promise<void> {
+    await this.directory.updateContact(workspaceContext.workspaceId, dto);
   }
 
   @Get(':id/members')

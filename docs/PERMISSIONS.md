@@ -604,6 +604,23 @@ analogue of admin `restore()`.
   returns `listing: null` in `GET /marketplace/favorites` rather than
   exposing stale or private data.
 
+## Public professional contact (Milestone 6)
+
+`Workspace.publicContactPhone`/`publicContactEmail`/`publicContactWhatsapp`
+are a deliberately separate, opt-in field set — structurally never the
+professional's private login `User.email`/`User.phone`. They exist
+purely so a marketplace visitor can reach the listing's professional
+(replacing the earlier "I'm Interested → Favorites" placeholder from
+Milestone 5) without reintroducing in-app messaging, which stays
+out of scope. Reuses the pre-existing `workspace.update` permission
+(seeded since Milestone 2, unused by any endpoint until now) rather
+than adding a new permission key — setting a workspace's own public
+identity is naturally the same authorization boundary as updating the
+workspace. `resolveWorkspaceIdentity` (`marketplace.mapper.ts`) only
+ever reads these three fields — there is no code path from it to
+`User`, so a private login credential cannot reach a public listing
+even through a future refactor that forgets to check the boundary.
+
 ## Moderation reason: two-tier design (Milestone 2, intentional)
 
 Reason is handled differently at the two moderation levels, on purpose:
@@ -661,7 +678,7 @@ standalone script, `apps/api/scripts/bootstrap-super-admin.ts` (run via
 (registered through the normal flow), and idempotently grants the role,
 writing an audit log entry with `actorUserId: null` (system action).
 
-## Status (Milestone 5)
+## Status (Milestone 6)
 
 Implemented through Milestone 2: workspace isolation and switching,
 membership lifecycle (invite → accept → suspend/remove/role-change),
@@ -710,8 +727,19 @@ unpublish/restore), and the mobile Home tab becoming the real client
 marketplace (browse/search/detail/favorites) alongside a "Prepare
 Listing" flow on the professional property detail screen.
 
+Milestone 6 adds: no new permission keys — it is a UX-completion and
+consistency milestone, not a feature milestone. It reuses the existing
+`workspace.update` permission for the new public-contact endpoint (see
+"Public professional contact" above) and the existing `property.view`/
+`client.view` permissions for the new dashboard aggregate's per-section
+DTO omission (see docs/API.md "Dashboard endpoint"). Role-aware mobile
+navigation branches on `accountType`, an onboarding-path signal, never
+on permissions or workspace membership — the authorization boundary
+itself is unchanged; only which screens a role can *reach* through
+normal navigation changed.
+
 Not yet built: messaging, viewings, collaboration, commission
-agreements, subscriptions, payments — those remain future milestones,
-and this document continues to define `collaboration.*`'s target
-permission model above (the keys exist in the catalog today but are not
-yet checked by any endpoint).
+agreements, subscriptions, payments, public agent/company profile
+pages — those remain future milestones, and this document continues to
+define `collaboration.*`'s target permission model above (the keys
+exist in the catalog today but are not yet checked by any endpoint).

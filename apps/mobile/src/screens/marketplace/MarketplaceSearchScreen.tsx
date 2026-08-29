@@ -11,10 +11,10 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { searchMarketplace } from '../../api/marketplace';
 import type { PublicPropertyListItem } from '../../api/types';
-import type { MarketplaceStackParamList } from '../../navigation/MarketplaceStack';
+import type { SearchStackParamList } from '../../navigation/client/SearchStack';
 import { ListingCard } from './ListingCard';
 
-type Props = NativeStackScreenProps<MarketplaceStackParamList, 'MarketplaceSearch'>;
+type Props = NativeStackScreenProps<SearchStackParamList, 'MarketplaceSearch'>;
 
 const PURPOSE_FILTERS: { label: string; value: 'SALE' | 'RENT' | undefined }[] = [
   { label: 'All', value: undefined },
@@ -79,15 +79,33 @@ export function MarketplaceSearchScreen({ route, navigation }: Props): React.JSX
     }
   };
 
+  const hasActiveFilters = search !== '' || listingPurpose !== undefined || sort !== 'newest';
+  const clearFilters = () => {
+    setSearch('');
+    setListingPurpose(undefined);
+    setSort('newest');
+  };
+
   return (
     <View style={styles.container}>
-      <TextInput
-        style={styles.search}
-        placeholder="Search title, city, area…"
-        value={search}
-        onChangeText={setSearch}
-        onSubmitEditing={() => void load(1, true)}
-      />
+      <View style={styles.searchRow}>
+        <TextInput
+          style={[styles.search, styles.flex1]}
+          placeholder="Search title, city, area…"
+          value={search}
+          onChangeText={setSearch}
+          onSubmitEditing={() => void load(1, true)}
+        />
+        {search !== '' && (
+          <TouchableOpacity
+            style={styles.clearSearchButton}
+            onPress={() => setSearch('')}
+            accessibilityLabel="Clear search"
+          >
+            <Text style={styles.clearSearchButtonText}>✕</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       <View style={styles.filterRow}>
         {PURPOSE_FILTERS.map((filter) => (
@@ -116,6 +134,11 @@ export function MarketplaceSearchScreen({ route, navigation }: Props): React.JSX
             </Text>
           </TouchableOpacity>
         ))}
+        {hasActiveFilters && (
+          <TouchableOpacity style={styles.clearFiltersButton} onPress={clearFilters}>
+            <Text style={styles.clearFiltersText}>Clear filters</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {loading ? (
@@ -157,19 +180,37 @@ export function MarketplaceSearchScreen({ route, navigation }: Props): React.JSX
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', margin: 12, gap: 8 },
+  flex1: { flex: 1 },
   search: {
-    margin: 12,
     borderWidth: 1,
     borderColor: '#d0d0d0',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  filterRow: { flexDirection: 'row', paddingHorizontal: 12, gap: 8, marginBottom: 8 },
+  clearSearchButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f0f0f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clearSearchButtonText: { color: '#666', fontWeight: '600' },
+  filterRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    gap: 8,
+    marginBottom: 8,
+    alignItems: 'center',
+  },
   chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: '#f0f0f0' },
   chipActive: { backgroundColor: '#1a73e8' },
   chipText: { color: '#333', fontSize: 12 },
   chipTextActive: { color: '#fff' },
+  clearFiltersButton: { paddingHorizontal: 4, paddingVertical: 6 },
+  clearFiltersText: { color: '#c0392b', fontSize: 12, fontWeight: '600' },
   listContent: { padding: 12 },
   columnWrapper: { gap: 12, marginBottom: 12 },
   gridCard: { flex: 1, width: undefined },

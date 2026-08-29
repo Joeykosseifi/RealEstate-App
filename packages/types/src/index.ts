@@ -9,3 +9,4 @@ export * from './matching';
 export * from './presentation';
 export * from './publication';
 export * from './marketplace';
+export * from './dashboard';

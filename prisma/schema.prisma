@@ -291,6 +291,16 @@ model Workspace {
   type WorkspaceType
   name String
 
+  /// Explicit, opt-in public-facing contact info shown to marketplace
+  /// visitors on this workspace's published listings (see
+  /// docs/PERMISSIONS.md "Public professional contact"). Deliberately
+  /// separate from `User.email`/`User.phone` (private login credentials)
+  /// — nothing is ever exposed publicly until the professional sets
+  /// these explicitly via workspace settings. Null means "not shown."
+  publicContactPhone    String?
+  publicContactEmail    String?
+  publicContactWhatsapp String?
+
   personalOwnerUserId String? @unique @db.Uuid
   personalOwner       User?   @relation("PersonalWorkspaceOwner", fields: [personalOwnerUserId], references: [id])
 

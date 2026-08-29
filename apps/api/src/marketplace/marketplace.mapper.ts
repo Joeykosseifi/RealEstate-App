@@ -77,12 +77,30 @@ export function resolveWorkspaceIdentity(workspace: WorkspaceWithIdentity): {
   workspaceType: 'PERSONAL' | 'COMPANY';
   displayName: string;
   logoUrl: string | null;
+  contactPhone?: string;
+  contactEmail?: string;
+  contactWhatsapp?: string;
 } {
+  // Explicit opt-in only — see docs/PERMISSIONS.md "Public professional
+  // contact". Never derived from User.email/User.phone.
+  const contact = {
+    ...(workspace.publicContactPhone
+      ? { contactPhone: workspace.publicContactPhone }
+      : {}),
+    ...(workspace.publicContactEmail
+      ? { contactEmail: workspace.publicContactEmail }
+      : {}),
+    ...(workspace.publicContactWhatsapp
+      ? { contactWhatsapp: workspace.publicContactWhatsapp }
+      : {}),
+  };
+
   if (workspace.type === 'COMPANY' && workspace.company) {
     return {
       workspaceType: 'COMPANY',
       displayName: workspace.company.name,
       logoUrl: workspace.company.logoUrl,
+      ...contact,
     };
   }
   if (workspace.personalOwner) {
@@ -90,12 +108,14 @@ export function resolveWorkspaceIdentity(workspace: WorkspaceWithIdentity): {
       workspaceType: 'PERSONAL',
       displayName: `${workspace.personalOwner.firstName} ${workspace.personalOwner.lastName}`,
       logoUrl: null,
+      ...contact,
     };
   }
   return {
     workspaceType: 'PERSONAL',
     displayName: workspace.name,
     logoUrl: null,
+    ...contact,
   };
 }
 

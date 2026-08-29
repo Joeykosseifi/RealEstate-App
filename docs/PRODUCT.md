@@ -200,6 +200,62 @@ docs/PERMISSIONS.md "Content moderation lifecycle — property
 publications" / "Marketplace authorization" for the full technical
 detail.
 
+### Core product completion & UX (Milestone 6)
+
+Milestone 6 is deliberately not a feature milestone — the spec it was
+built from opens by saying so explicitly: no in-app chat, no viewing
+scheduler, no collaboration/commission/subscription systems, no
+advanced analytics or AI. Its job is making everything Milestones 1-5
+already built actually reachable and usable end-to-end on mobile, so V1
+can reach beta faster rather than growing wider first.
+
+- **Role-aware navigation, for real.** `MainTabs` now branches on the
+  account's registration path (`accountType: 'CLIENT'` vs. `'AGENT'`/
+  `'COMPANY'`) rather than rendering one tab bar with some items hidden.
+  A **Client** gets Home (marketplace) / Search / Favorites / Account. A
+  **professional** (independent agent or company member) gets
+  Dashboard / Properties / Clients / Account. Requirements, matching,
+  shortlisting, and presentations — the Milestone 4 CRM workflow — live
+  inside Clients → Client Detail rather than as their own tabs, so a
+  professional follows one continuous path (Client → Requirement →
+  Matching → Shortlist → Presentation) instead of hunting across
+  screens for related work.
+- **A real professional dashboard.** `GET /workspaces/:id/dashboard`
+  replaces "no dashboard at all" with live counts (properties by
+  status, private vs. published vs. pending review, active clients,
+  active requirements) and each caller's own 5 most recent
+  properties/clients — never a fabricated number, and a section is
+  simply absent if the caller lacks the matching view permission.
+- **Contact the professional, without messaging.** Marketplace listing
+  detail replaces the Milestone 5 "I'm Interested → adds to Favorites"
+  placeholder with real Call / WhatsApp / Email actions, using a new,
+  explicit opt-in `Workspace.publicContact*` field set the professional
+  manages from Account settings — never their private login email/phone,
+  and never the property owner's contact info. This is intentionally
+  not messaging: it hands off to the device's own phone/mail/WhatsApp
+  apps rather than building an in-app inbox.
+- **Account & workspace experience.** A real `AccountScreen` replaces
+  the Milestone 3 `MoreScreen`/`PlaceholderScreen` stubs: identity,
+  sign-out, and a password-reset entry point for everyone; for a
+  professional, a workspace switcher that always shows which workspace
+  (and PERSONAL vs. COMPANY) is currently active, plus the public
+  contact editor above.
+- **Closing the photo-upload gap.** The property media upload endpoint
+  has existed since Milestone 3, but no screen ever called it — a
+  professional could never actually attach photos to a property outside
+  the initial add flow. `PropertyDetailScreen`'s gallery now does, via
+  `expo-image-picker`.
+- **Consistent list/search UX.** Properties, Clients, and marketplace
+  Search all now share the same UX vocabulary: a clearable search box,
+  visible active filters, distinct loading/empty/error states, and
+  pull-to-refresh — so no list screen goes silently blank on a network
+  error or looks broken when it's just genuinely empty.
+
+See docs/API.md "Dashboard endpoint (Milestone 6)" / "Public contact
+endpoint (Milestone 6)" / "Mobile role-aware navigation & UX (Milestone
+6)" and docs/PERMISSIONS.md "Public professional contact (Milestone 6)"
+for the full technical detail.
+
 ## Build order
 
 The platform is built milestone by milestone; see the root

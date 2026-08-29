@@ -22,11 +22,21 @@ export interface PublicMedia {
   isMain: boolean;
 }
 
-/** How the listing's professional identity is publicly attributed — never the workspace's raw internal data. */
+/**
+ * How the listing's professional identity is publicly attributed — never
+ * the workspace's raw internal data. `contact*` fields are only ever the
+ * workspace's explicit, opt-in public contact info (see
+ * docs/PERMISSIONS.md "Public professional contact") — never a private
+ * login email/phone, and `undefined` (not shown) unless the professional
+ * has set them.
+ */
 export interface PublicListingIdentity {
   workspaceType: 'PERSONAL' | 'COMPANY';
   displayName: string;
   logoUrl: string | null;
+  contactPhone?: string;
+  contactEmail?: string;
+  contactWhatsapp?: string;
 }
 
 export interface PublicPropertyListItem {

@@ -130,6 +130,37 @@ workspace permissions to include it (`@RequireWorkspacePermission`).
 | `POST workspaces/:id/roles` | `workspace.manage_roles` | `{ key, name, description?, permissionKeys[] }`. `403` if any requested key is `PLATFORM`-scope — see `docs/PERMISSIONS.md`. |
 | `PATCH workspaces/:id/roles/:roleId` | `workspace.manage_roles` | Custom roles only (not system roles). |
 | `DELETE workspaces/:id/roles/:roleId` | `workspace.manage_roles` | `409` if the role is currently assigned to any member. |
+| `GET workspaces/:id/dashboard` | `workspace.view` | Real-data aggregate — see "Dashboard endpoint (Milestone 6)" below. |
+| `PATCH workspaces/:id/contact` | `workspace.update` | `{ publicContactPhone?, publicContactEmail?, publicContactWhatsapp? }` — see "Public contact endpoint (Milestone 6)" below. `204`. |
+
+### Dashboard endpoint (Milestone 6)
+
+`GET workspaces/:id/dashboard` returns a `WorkspaceDashboard` built
+entirely from live queries scoped to the caller's own workspace —
+nothing is fabricated or cached. Each top-level section is present only
+if the caller holds the matching view permission, same DTO-omission
+policy as the property/client detail endpoints:
+
+- `properties` (needs `property.view`): `total`, `byBusinessStatus`,
+  `private` (no publication yet), `published`, `pendingReview`, and
+  `recent` (the 5 most recently updated, same shape as the properties
+  list endpoint).
+- `clients` (needs `client.view`): `total`, `activeRequirements`, and
+  `recent` (the 5 most recently updated).
+
+A caller with neither permission gets `{}` — the mobile dashboard
+screen renders "Nothing to show yet" rather than a broken/empty layout.
+
+### Public contact endpoint (Milestone 6)
+
+`PATCH workspaces/:id/contact` lets a workspace owner (or anyone
+holding `workspace.update`) set the **explicit, opt-in** phone/email/
+WhatsApp shown to marketplace visitors on that workspace's published
+listings. This is structurally never the professional's private login
+`User.email`/`phone` — it's a separate, blank-by-default field set on
+`Workspace`. Per field: omit it to leave it untouched, send `""` to
+clear it, send a value to set it (email is validated). See
+`docs/PERMISSIONS.md` "Public professional contact (Milestone 6)".
 
 ### Admin endpoints (Milestone 2)
 
@@ -352,7 +383,7 @@ authorization."
 | Method & path | Notes |
 |---|---|
 | `GET marketplace/properties` | Paginated. Filters: `search`, `propertyType`, `listingPurpose`, `priceMin`/`priceMax`, `bedroomsMin`/`bathroomsMin`, `areaMin`/`areaMax`, `country`/`city`/`area`, `features`. `sort`: `newest` (default) / `price_asc` / `price_desc`. Source of truth is `PropertyPublication`/`PropertyPublicationVersion`, never the raw `Property` — see docs/PERMISSIONS.md "Marketplace source of truth." |
-| `GET marketplace/properties/:publicationId` | Full `PublicPropertyDetail`. `:publicationId` is the `PropertyPublication` id — the private `propertyId` is never accepted or exposed here. Unavailable/nonexistent → plain `404`, never distinguishable. |
+| `GET marketplace/properties/:publicationId` | Full `PublicPropertyDetail`. `:publicationId` is the `PropertyPublication` id — the private `propertyId` is never accepted or exposed here. Unavailable/nonexistent → plain `404`, never distinguishable. `identity.contactPhone`/`contactEmail`/`contactWhatsapp` (Milestone 6) appear only as present-or-absent keys, sourced exclusively from the workspace's opt-in `publicContact*` fields — never the professional's private login email/phone. |
 | `POST marketplace/properties/:publicationId/favorite` | Idempotent (`204` even if already favorited). `404` if the listing isn't currently eligible for favoriting (same eligibility rule as browsing). |
 | `DELETE marketplace/properties/:publicationId/favorite` | `204`. |
 | `GET marketplace/favorites` | Paginated. A favorite whose listing has since become unavailable returns `listing: null` rather than stale/private data. |
@@ -493,6 +524,40 @@ and remains the real authority. Deliberately minimal: a plain
 `fetch`-based API client storing the JWT in `localStorage`, no design
 system beyond Tailwind utility classes — functional correctness, not
 visual polish, was the priority for this internal tool.
+
+### Mobile role-aware navigation & UX (Milestone 6)
+
+`MainTabs` branches on `user.accountType` (the registration-path signal,
+never workspace presence — see docs/PERMISSIONS.md) rather than
+rendering one shared tab bar with hidden items:
+
+- **`ClientTabs`**: Home (marketplace), Search, Favorites, Account —
+  each of Home/Search/Favorites is its own independent stack navigator
+  so back-navigation never crosses tabs, unified only by a small shared
+  `MarketplaceDetailParamList` type so all three can push the same
+  `MarketplaceDetailScreen`. A client can never reach a professional
+  screen through any navigation path — there is no route for it.
+- **`ProfessionalTabs`** (AGENT or COMPANY account): Dashboard,
+  Properties, Clients, Account. Requirements/Matching/Shortlist/
+  Presentations are deliberately **not** separate top-level tabs — they
+  stay reachable through Clients → Client Detail, matching the natural
+  CRM flow (Client → Requirement → Matching → Shortlist →
+  Presentation) the product spec itself describes, rather than
+  cluttering the tab bar. `DashboardScreen` still deep-links into them
+  (`navigation.navigate('Properties', { screen: 'PropertyDetail', params })`)
+  using `NavigatorScreenParams` for full cross-stack type safety.
+- Both replace the Milestone 3 `MoreScreen`/`PlaceholderScreen` stubs
+  with a real `AccountScreen` (see docs/PRODUCT.md "Account & workspace
+  experience (Milestone 6)").
+- Every list screen touched this milestone (Properties, Clients,
+  marketplace Search) gained the same common UX states: a distinct
+  empty-vs-error-vs-loading render, clearable search/filters with a
+  visible active-filter indicator, and pull-to-refresh — never a silent
+  failure or an indistinguishable blank screen.
+- The property photo upload gap (the backend upload endpoint existed
+  since Milestone 3 but no screen ever called it) is closed:
+  `PropertyDetailScreen`'s gallery now uses `expo-image-picker` to pick
+  and upload images with progress state.
 
 ## N+1 prevention
 

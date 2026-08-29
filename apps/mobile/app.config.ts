@@ -45,6 +45,13 @@ const config: ExpoConfig = {
           'Used only when you tap "Use my current location" while placing a property pin.',
       },
     ],
+    [
+      'expo-image-picker',
+      {
+        photosPermission: 'Used only when you choose a property photo to upload.',
+        cameraPermission: 'Used only when you take a property photo to upload.',
+      },
+    ],
   ],
 };
 
