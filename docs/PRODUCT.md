@@ -58,6 +58,46 @@ registration → email verification + phone OTP verification → activation.
 See `docs/API.md` for the concrete endpoints and `docs/DATABASE.md` for
 the activation/idempotency guarantees behind "exactly one" above.
 
+### Mobile registration & onboarding (Milestone 6.1)
+
+Milestone 6 shipped role-aware navigation for an already-authenticated
+user but left mobile with no way to actually create an account — sign-in
+only worked for a user already created through the API. Milestone 6.1
+closes that gap with a real unauthenticated entry flow, using the
+registration/verification/reset architecture above exactly as built —
+no new backend endpoints, no parallel auth system:
+
+- **Welcome → Sign In / Create Account.** `AuthStack`
+  (`apps/mobile/src/navigation/AuthStack.tsx`) is what an unauthenticated
+  user sees; `RootNavigator` swaps to it whenever there's no session, and
+  swaps away the instant one exists.
+- **Create Account** collects the exact fields the backend DTOs require
+  (name, email, phone, password + a client-side-only confirmation,
+  terms acceptance) and an account-type picker using the real backend
+  enum — CLIENT, AGENT, or COMPANY (COMPANY also collects the required
+  `companyName`) — never an invented frontend-only role. Each option
+  calls its matching `POST /auth/register/*` endpoint directly.
+- **Verification** is real, never bypassed: since registration issues no
+  session (see "Registration → activation flow" below), the screen
+  drives the actual email-token and phone-OTP endpoints using the
+  address/number just registered, and only once both succeed does it log
+  the user in (client-side password is held only in memory for this one
+  step). The identical screen is reused, unauthenticated-prop-free, by
+  `RootNavigator` for a `PENDING_VERIFICATION` account that signs back in
+  before finishing verification (the backend allows this — see below) —
+  one component, two entry points, no duplicated verification logic.
+- **Forgot Password** mirrors the same request-a-token-by-email UX as
+  verification, since the backend's reset mechanism is a token emailed as
+  text (see `docs/API.md`), not a clickable deep link.
+- **Post-registration routing reuses Milestone 6 navigation as-is** —
+  once verification completes and the user is logged in, `MainTabs`
+  makes the same accountType-based decision it already made for
+  pre-existing accounts. No second routing implementation exists.
+
+See `docs/API.md` "Mobile registration & onboarding" for the endpoint
+mapping and `docs/PERMISSIONS.md` "Mobile registration cannot influence
+authorization" for why none of this changes the authorization boundary.
+
 ## Professional property database (Milestone 3)
 
 Every AGENT personal workspace and every COMPANY workspace now has a real

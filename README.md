@@ -120,6 +120,21 @@ runs the suite, and tears both servers down — see
 why it flushes Redis first (the suite drives real traffic through the
 real login/registration rate limiters, never a weakened stand-in).
 
+### Known real-device-only verification gaps
+
+Two pieces of mobile UI are verified against the real backend (curl-level
+smoke tests, or the package's own type definitions) but not by actually
+tapping through them on a physical device or simulator, since this
+sandbox has neither:
+
+- `PropertyDetailScreen`'s photo upload (`expo-image-picker`, Milestone
+  6) — the picker's own permission prompt and camera-roll UI.
+- The mobile registration/verification screens' paste-the-token flow
+  (Milestone 6.1) — keyboard behavior, autofill, and copy-paste from the
+  device's mail/SMS apps into the token/OTP fields.
+
+Add both to the pre-launch device/beta testing checklist before shipping.
+
 ## Build order (milestones)
 
 The platform is built one milestone at a time; each is fully tested,
@@ -134,6 +149,7 @@ linted, security-reviewed, and documented before the next begins.
 | 4 | CRM, requirements, matching, presentations/PDFs | ✅ |
 | 5 | Publication workflow, admin moderation & client marketplace (search, favorites) | ✅ |
 | 6 | Core product completion & UX (role-aware navigation, real dashboard, contact-professional, workflow/UX polish) | ✅ |
+| 6.1 | Mobile registration & onboarding closure (Welcome/Sign In/Create Account, real verification, forgot password) | ✅ |
 | 7 | Design system & full UI polish | ⬜ |
 | 8 | Conversations, messages, viewings, notifications | ⬜ |
 | 9 | Company workspace, employee accounts, team management | ⬜ |

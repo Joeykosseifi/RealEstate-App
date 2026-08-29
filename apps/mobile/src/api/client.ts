@@ -82,9 +82,17 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const data = (await response.json().catch(() => null)) as unknown;
 
   if (!response.ok) {
-    const message =
+    const rawMessage =
       data && typeof data === 'object' && 'message' in data
-        ? String((data as { message: unknown }).message)
+        ? (data as { message: unknown }).message
+        : null;
+    // The backend's ValidationPipe returns an array of messages when
+    // several fields fail at once (see docs/API.md) — join them into one
+    // readable string rather than showing "field1,field2" (Array#toString).
+    const message = Array.isArray(rawMessage)
+      ? rawMessage.join('\n')
+      : typeof rawMessage === 'string'
+        ? rawMessage
         : `Request failed with status ${response.status}`;
     throw new ApiError(response.status, message);
   }

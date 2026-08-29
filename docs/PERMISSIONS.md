@@ -621,6 +621,39 @@ ever reads these three fields — there is no code path from it to
 `User`, so a private login credential cannot reach a public listing
 even through a future refactor that forgets to check the boundary.
 
+## Mobile registration cannot influence authorization (Milestone 6.1)
+
+The mobile Create Account screen's account-type picker (CLIENT/AGENT/
+COMPANY) is a UI convenience for choosing which `POST auth/register/*`
+endpoint to call — it has no authorization weight of its own. Every
+guarantee that already held for API-driven registration holds
+identically for mobile registration, because nothing about how
+`AuthService`/`AccountActivationService`/`WorkspaceAuthorizationService`
+work has changed:
+
+- `accountType` only ever decides onboarding shape (does a workspace get
+  created, and which kind) — it is never read by `@RequireWorkspacePermission`/
+  `@RequirePlatformPermission`, which resolve purely from the caller's
+  actual `WorkspaceMembership`/`UserPlatformRole` rows. A client cannot
+  register as AGENT and thereby gain a workspace they don't otherwise
+  qualify for, nor can any client-supplied field shortcut membership
+  resolution.
+- A CLIENT registration never creates a workspace at all (see
+  `AccountActivationService`) — there is no membership row for
+  `WorkspaceAuthorizationService` to ever find, so every workspace-rooted
+  endpoint structurally 403s for that account regardless of any UI state.
+- Verification cannot be bypassed from the client: `email/verify` and
+  `phone/verify` are real server-side checks against a hashed,
+  TTL-bound, one-time-use record (see "Content moderation lifecycle" and
+  `EmailVerificationService`/`PhoneVerificationService`) — the mobile
+  screen has no path that marks a user verified without both endpoints
+  actually succeeding.
+- A `SUSPENDED`/`DEACTIVATED` account cannot regain access by any
+  client-side state manipulation: `JwtStrategy` re-checks `accountStatus`
+  from the database on every single request (see "Owner & Super Admin
+  lockout protection" and Milestone 1), independent of what the mobile
+  app's local session state believes.
+
 ## Moderation reason: two-tier design (Milestone 2, intentional)
 
 Reason is handled differently at the two moderation levels, on purpose:
@@ -737,6 +770,12 @@ navigation branches on `accountType`, an onboarding-path signal, never
 on permissions or workspace membership — the authorization boundary
 itself is unchanged; only which screens a role can *reach* through
 normal navigation changed.
+
+Milestone 6.1 adds: no new permission keys, no authorization changes —
+it is a mobile-onboarding closure milestone (see "Mobile registration
+cannot influence authorization" above). It reuses every existing
+registration/verification/login/password-reset endpoint exactly as
+built in Milestone 1.
 
 Not yet built: messaging, viewings, collaboration, commission
 agreements, subscriptions, payments, public agent/company profile

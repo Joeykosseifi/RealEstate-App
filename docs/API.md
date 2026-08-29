@@ -99,6 +99,30 @@ activation (`AccountActivationService`), which flips `accountStatus` to
 specific product features, not authentication itself; only
 `SUSPENDED`/`DEACTIVATED` block login.
 
+### Mobile registration & onboarding (Milestone 6.1)
+
+`apps/mobile`'s unauthenticated entry flow (`AuthStack` — Welcome → Sign
+In / Create Account) calls the endpoints above directly, one screen per
+step, with no intermediate abstraction:
+
+| Screen | Endpoint(s) |
+|---|---|
+| `CreateAccountScreen` | `POST auth/register/{client,agent,company}` |
+| `VerificationScreen` (also reused by `RootNavigator` for a returning `PENDING_VERIFICATION` session) | `POST auth/email/verify`, `POST auth/email/resend`, `POST auth/phone/request-otp`, `POST auth/phone/verify`, then `POST auth/login` (fresh registration) or a plain `GET auth/me` + `GET workspaces` refresh (resumed session) |
+| `ForgotPasswordScreen` | `POST auth/password/forgot`, `POST auth/password/reset` |
+| `SignInScreen` | `POST auth/login` |
+
+Client-side validation (`apps/mobile/src/auth/validation.ts`) mirrors the
+backend's real rules (email shape, E.164-ish phone shape, 8-128 char
+password, confirmation match, required terms acceptance, `companyName`
+required only for COMPANY) purely for fast feedback — the backend DTOs
+remain the sole authority, and every field is re-validated server-side
+regardless of what the client already checked. A 400/409 from any of
+these calls surfaces the backend's own message text (already
+human-readable — see `HttpExceptionFilter`) rather than a raw
+stack trace; an array of validation messages is joined into one string
+by `apps/mobile/src/api/client.ts` before being shown.
+
 ## Workspace context (Milestone 2)
 
 Workspace-rooted endpoints resolve the workspace from the route's `:id`

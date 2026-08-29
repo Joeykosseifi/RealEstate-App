@@ -20,6 +20,14 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   selectWorkspace: (workspace: WorkspaceSummary) => void;
+  /**
+   * Re-fetches the current user + workspace list without a fresh login —
+   * used once email + phone verification complete for an already-signed-in
+   * `PENDING_VERIFICATION` account (see `screens/auth/VerificationScreen`),
+   * so the newly-activated AGENT/COMPANY workspace and `accountStatus`
+   * become visible without asking the user to sign in again.
+   */
+  refreshSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -110,8 +118,9 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
       login,
       logout,
       selectWorkspace: setCurrentWorkspace,
+      refreshSession: loadSession,
     }),
-    [status, user, workspaces, currentWorkspace, permissions, login, logout],
+    [status, user, workspaces, currentWorkspace, permissions, login, logout, loadSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

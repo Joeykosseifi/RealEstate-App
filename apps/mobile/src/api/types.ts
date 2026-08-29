@@ -8,14 +8,19 @@
  * has been run end-to-end at least once.
  */
 
+export type AccountType = 'CLIENT' | 'AGENT' | 'COMPANY';
+export type AccountStatus = 'PENDING_VERIFICATION' | 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED';
+
 export interface AuthUser {
   id: string;
   firstName: string;
   lastName: string;
   email: string;
   phone: string;
-  accountType: 'CLIENT' | 'AGENT' | 'COMPANY';
-  accountStatus: string;
+  accountType: AccountType;
+  accountStatus: AccountStatus;
+  emailVerifiedAt: string | null;
+  phoneVerifiedAt: string | null;
 }
 
 export interface AuthTokens {

@@ -1,6 +1,7 @@
 import { useAuth } from '../auth/AuthContext';
 import { ClientTabs } from './client/ClientTabs';
 import { ProfessionalTabs } from './professional/ProfessionalTabs';
+import { resolveMainTabsKind } from './roleRouting';
 
 /**
  * Role-aware navigation root (see docs/PRODUCT.md "Role-aware
@@ -14,5 +15,9 @@ import { ProfessionalTabs } from './professional/ProfessionalTabs';
  */
 export function MainTabs(): React.JSX.Element {
   const { user } = useAuth();
-  return user?.accountType === 'CLIENT' ? <ClientTabs /> : <ProfessionalTabs />;
+  return resolveMainTabsKind(user?.accountType) === 'client' ? (
+    <ClientTabs />
+  ) : (
+    <ProfessionalTabs />
+  );
 }
