@@ -2,7 +2,10 @@ import request from 'supertest';
 import { createTestApp, resetRateLimits, type TestApp } from './utils/test-app';
 import {
   authHeader,
+  createAndApprovePublishedListing,
   createProperty,
+  grantPlatformRole,
+  registerVerifiedAgent,
   registerVerifiedCompanyOwner,
 } from './utils/flows';
 
@@ -288,5 +291,92 @@ describe('Property search & pagination', () => {
     );
     expect(response.body.items).toHaveLength(1);
     expect(response.body.items[0].workspaceId).toBe(ownerA.workspaceId);
+  });
+
+  it('66. list items expose publicationStatus — null while private, PUBLISHED once approved (Milestone 7 property-card requirement)', async () => {
+    const owner = await registerVerifiedCompanyOwner(testApp);
+    const admin = await registerVerifiedAgent(testApp);
+    await grantPlatformRole(testApp, admin.id, 'SUPER_ADMIN');
+
+    const property = await createProperty(
+      testApp,
+      owner.workspaceId,
+      owner.accessToken,
+      {
+        title: 'Publication Badge Villa',
+      },
+    );
+
+    const beforePublish = await listProperties(
+      testApp,
+      owner.workspaceId,
+      owner.accessToken,
+      '?search=Publication Badge Villa',
+    );
+    expect(beforePublish.body.items[0].id).toBe(property.id);
+    expect(beforePublish.body.items[0].publicationStatus).toBeNull();
+
+    await createAndApprovePublishedListing(
+      testApp,
+      owner.workspaceId,
+      owner.accessToken,
+      admin.accessToken,
+      { title: 'Publication Badge Villa 2' },
+    );
+
+    const afterPublish = await listProperties(
+      testApp,
+      owner.workspaceId,
+      owner.accessToken,
+      '?search=Publication Badge Villa 2',
+    );
+    expect(afterPublish.body.items[0].publicationStatus).toBe('PUBLISHED');
+  });
+
+  it('67. publicationFilter narrows the list to PRIVATE, PENDING_REVIEW, or PUBLISHED properties (Milestone 7 primary filter chips)', async () => {
+    const owner = await registerVerifiedCompanyOwner(testApp);
+    const admin = await registerVerifiedAgent(testApp);
+    await grantPlatformRole(testApp, admin.id, 'SUPER_ADMIN');
+
+    const privateProperty = await createProperty(
+      testApp,
+      owner.workspaceId,
+      owner.accessToken,
+      {
+        title: 'Filter Chip Private',
+      },
+    );
+    const { propertyId: publishedPropertyId } =
+      await createAndApprovePublishedListing(
+        testApp,
+        owner.workspaceId,
+        owner.accessToken,
+        admin.accessToken,
+        { title: 'Filter Chip Published' },
+      );
+
+    const privateOnly = await listProperties(
+      testApp,
+      owner.workspaceId,
+      owner.accessToken,
+      '?publicationFilter=PRIVATE',
+    );
+    const privateIds = (privateOnly.body.items as { id: string }[]).map(
+      (item) => item.id,
+    );
+    expect(privateIds).toContain(privateProperty.id);
+    expect(privateIds).not.toContain(publishedPropertyId);
+
+    const publishedOnly = await listProperties(
+      testApp,
+      owner.workspaceId,
+      owner.accessToken,
+      '?publicationFilter=PUBLISHED',
+    );
+    const publishedIds = (publishedOnly.body.items as { id: string }[]).map(
+      (item) => item.id,
+    );
+    expect(publishedIds).toContain(publishedPropertyId);
+    expect(publishedIds).not.toContain(privateProperty.id);
   });
 });

@@ -30,10 +30,12 @@ const DETAIL_INCLUDE = {
   media: true,
   owners: true,
   privateDetails: true,
+  publication: { select: { status: true } },
 } satisfies Prisma.PropertyInclude;
 
 const LIST_INCLUDE = {
   location: { select: { city: true, area: true } },
+  publication: { select: { status: true } },
   media: {
     select: {
       id: true,
@@ -269,6 +271,13 @@ export class PropertiesService {
     }
     if (query.createdByUserId) {
       and.push({ createdByUserId: query.createdByUserId });
+    }
+    if (query.publicationFilter === 'PRIVATE') {
+      and.push({ publication: null });
+    } else if (query.publicationFilter === 'PENDING_REVIEW') {
+      and.push({ publication: { status: 'PENDING_REVIEW' } });
+    } else if (query.publicationFilter === 'PUBLISHED') {
+      and.push({ publication: { status: 'PUBLISHED' } });
     }
     if (query.city) {
       and.push({

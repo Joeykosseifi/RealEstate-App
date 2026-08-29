@@ -84,13 +84,13 @@ export default function PublicationReviewDetailPage() {
   };
 
   if (loading || !user) {
-    return <p className="p-6 text-gray-500">Loading…</p>;
+    return <p className="p-6 text-text-secondary">Loading…</p>;
   }
   if (loadingDetail) {
-    return <p className="p-6 text-gray-500">Loading…</p>;
+    return <p className="p-6 text-text-secondary">Loading…</p>;
   }
   if (error || !detail) {
-    return <p className="p-6 text-red-600">{error ?? 'Not found.'}</p>;
+    return <p className="p-6 text-[var(--color-status-sold-fg)]">{error ?? 'Not found.'}</p>;
   }
 
   const { snapshot } = detail;
@@ -99,182 +99,184 @@ export default function PublicationReviewDetailPage() {
   const canRestore = detail.status === 'ADMIN_UNPUBLISHED';
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
-      <Link href="/publications" className="text-sm text-blue-600 hover:underline">
-        ← Back to queue
-      </Link>
+    <div className="min-h-full bg-[var(--color-app-bg)]">
+      <div className="mx-auto max-w-4xl p-6">
+        <Link href="/publications" className="text-sm text-navy hover:underline">
+          ← Back to queue
+        </Link>
 
-      <div className="mt-4 flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">{snapshot.publicTitle}</h1>
-          <p className="text-gray-500">
-            {detail.workspaceName} · Submitted by {detail.submittedByName ?? 'Unknown'}
-          </p>
+        <div className="mt-4 flex items-start justify-between rounded-xl border border-border bg-surface p-5 shadow-sm">
+          <div>
+            <h1 className="text-2xl font-semibold text-deep-navy">{snapshot.publicTitle}</h1>
+            <p className="text-text-secondary">
+              {detail.workspaceName} · Submitted by {detail.submittedByName ?? 'Unknown'}
+            </p>
+          </div>
+          <span className="rounded-full bg-[var(--color-status-pending-bg)] px-3 py-1 text-sm font-semibold text-[var(--color-status-pending-fg)]">
+            {detail.status.replaceAll('_', ' ')}
+          </span>
         </div>
-        <span className="rounded-full bg-gray-100 px-3 py-1 text-sm">
-          {detail.status.replaceAll('_', ' ')}
-        </span>
-      </div>
 
-      {snapshot.media.length > 0 && (
-        <div className="mt-4 flex gap-2 overflow-x-auto">
-          {snapshot.media.map((media) => (
-            // eslint-disable-next-line @next/next/no-img-element -- external signed URL, not a local static asset
-            <img
-              key={media.id}
-              src={media.url ?? undefined}
-              alt=""
-              className="h-32 w-32 rounded object-cover"
-            />
-          ))}
-        </div>
-      )}
-
-      <div className="mt-6 grid grid-cols-2 gap-4 text-sm">
-        <div>
-          <span className="text-gray-500">Price</span>
-          <p className="font-medium">
-            {snapshot.currency} {snapshot.publicPrice.toLocaleString()}
-          </p>
-        </div>
-        <div>
-          <span className="text-gray-500">Type / Purpose</span>
-          <p className="font-medium">
-            {snapshot.propertyType} · {snapshot.listingPurpose}
-          </p>
-        </div>
-        <div>
-          <span className="text-gray-500">Bedrooms / Bathrooms / Area</span>
-          <p className="font-medium">
-            {snapshot.bedrooms ?? '—'} / {snapshot.bathrooms ?? '—'} / {snapshot.areaSqm ?? '—'} sqm
-          </p>
-        </div>
-        <div>
-          <span className="text-gray-500">Location</span>
-          <p className="font-medium">
-            {[snapshot.publicCity, snapshot.publicArea].filter(Boolean).join(', ') || 'Hidden'} (
-            {snapshot.locationVisibility})
-          </p>
-        </div>
-      </div>
-
-      {snapshot.publicDescription && (
-        <p className="mt-4 text-sm text-gray-700">{snapshot.publicDescription}</p>
-      )}
-
-      {snapshot.publicFeatureKeys.length > 0 && (
-        <div className="mt-4 flex flex-wrap gap-2">
-          {snapshot.publicFeatureKeys.map((key) => (
-            <span key={key} className="rounded-full bg-gray-100 px-3 py-1 text-xs">
-              {key}
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div className="mt-6 flex flex-wrap gap-2">
-        {canDecide && (
-          <>
-            <button
-              onClick={onApprove}
-              disabled={actionPending}
-              className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              Approve
-            </button>
-            <button
-              onClick={() => setDialog('request-changes')}
-              disabled={actionPending}
-              className="rounded bg-amber-500 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              Request Changes
-            </button>
-            <button
-              onClick={() => setDialog('reject')}
-              disabled={actionPending}
-              className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              Reject
-            </button>
-          </>
+        {snapshot.media.length > 0 && (
+          <div className="mt-4 flex gap-2 overflow-x-auto">
+            {snapshot.media.map((media) => (
+              // eslint-disable-next-line @next/next/no-img-element -- external signed URL, not a local static asset
+              <img
+                key={media.id}
+                src={media.url ?? undefined}
+                alt=""
+                className="h-32 w-32 rounded-lg border border-border object-cover"
+              />
+            ))}
+          </div>
         )}
-        {canUnpublish && (
-          <button
-            onClick={() => setDialog('unpublish')}
-            disabled={actionPending}
-            className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-          >
-            Unpublish
-          </button>
-        )}
-        {canRestore && (
-          <button
-            onClick={onRestore}
-            disabled={actionPending}
-            className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-          >
-            Restore
-          </button>
-        )}
-      </div>
 
-      <div className="mt-8">
-        <h2 className="mb-2 text-lg font-semibold">Review History</h2>
-        <ul className="space-y-2 text-sm">
-          {detail.history.map((entry) => (
-            <li key={entry.id} className="rounded border p-3">
-              <p className="font-medium">
-                Version {entry.versionNumber} — {entry.status.replaceAll('_', ' ')}
-              </p>
-              {entry.submittedAt && (
-                <p className="text-gray-500">
-                  Submitted {new Date(entry.submittedAt).toLocaleString()}
+        <div className="mt-6 grid grid-cols-2 gap-4 rounded-xl border border-border bg-surface p-5 text-sm shadow-sm">
+          <div>
+            <span className="text-text-secondary">Price</span>
+            <p className="font-medium text-[var(--foreground)]">
+              {snapshot.currency} {snapshot.publicPrice.toLocaleString()}
+            </p>
+          </div>
+          <div>
+            <span className="text-text-secondary">Type / Purpose</span>
+            <p className="font-medium text-[var(--foreground)]">
+              {snapshot.propertyType} · {snapshot.listingPurpose}
+            </p>
+          </div>
+          <div>
+            <span className="text-text-secondary">Bedrooms / Bathrooms / Area</span>
+            <p className="font-medium text-[var(--foreground)]">
+              {snapshot.bedrooms ?? '—'} / {snapshot.bathrooms ?? '—'} / {snapshot.areaSqm ?? '—'} m²
+            </p>
+          </div>
+          <div>
+            <span className="text-text-secondary">Location</span>
+            <p className="font-medium text-[var(--foreground)]">
+              {[snapshot.publicCity, snapshot.publicArea].filter(Boolean).join(', ') || 'Hidden'} (
+              {snapshot.locationVisibility})
+            </p>
+          </div>
+        </div>
+
+        {snapshot.publicDescription && (
+          <p className="mt-4 text-sm text-[var(--foreground)]">{snapshot.publicDescription}</p>
+        )}
+
+        {snapshot.publicFeatureKeys.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {snapshot.publicFeatureKeys.map((key) => (
+              <span key={key} className="rounded-full border border-border bg-surface px-3 py-1 text-xs text-text-secondary">
+                {key}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-6 flex flex-wrap gap-2">
+          {canDecide && (
+            <>
+              <button
+                onClick={onApprove}
+                disabled={actionPending}
+                className="rounded-lg bg-[var(--color-status-available-fg)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+              >
+                Approve
+              </button>
+              <button
+                onClick={() => setDialog('request-changes')}
+                disabled={actionPending}
+                className="rounded-lg bg-[var(--color-status-pending-fg)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+              >
+                Request Changes
+              </button>
+              <button
+                onClick={() => setDialog('reject')}
+                disabled={actionPending}
+                className="rounded-lg bg-[var(--color-status-sold-fg)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+              >
+                Reject
+              </button>
+            </>
+          )}
+          {canUnpublish && (
+            <button
+              onClick={() => setDialog('unpublish')}
+              disabled={actionPending}
+              className="rounded-lg bg-[var(--color-status-sold-fg)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+            >
+              Unpublish
+            </button>
+          )}
+          {canRestore && (
+            <button
+              onClick={onRestore}
+              disabled={actionPending}
+              className="rounded-lg bg-navy px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+            >
+              Restore
+            </button>
+          )}
+        </div>
+
+        <div className="mt-8">
+          <h2 className="mb-2 text-lg font-semibold text-deep-navy">Review History</h2>
+          <ul className="space-y-2 text-sm">
+            {detail.history.map((entry) => (
+              <li key={entry.id} className="rounded-lg border border-border bg-surface p-3 shadow-sm">
+                <p className="font-medium text-[var(--foreground)]">
+                  Version {entry.versionNumber} — {entry.status.replaceAll('_', ' ')}
                 </p>
-              )}
-              {entry.reviewedAt && (
-                <p className="text-gray-500">
-                  Reviewed {new Date(entry.reviewedAt).toLocaleString()}
-                </p>
-              )}
-              {entry.reviewReason && <p className="mt-1 text-gray-700">“{entry.reviewReason}”</p>}
-            </li>
-          ))}
-        </ul>
-      </div>
+                {entry.submittedAt && (
+                  <p className="text-text-secondary">
+                    Submitted {new Date(entry.submittedAt).toLocaleString()}
+                  </p>
+                )}
+                {entry.reviewedAt && (
+                  <p className="text-text-secondary">
+                    Reviewed {new Date(entry.reviewedAt).toLocaleString()}
+                  </p>
+                )}
+                {entry.reviewReason && <p className="mt-1 text-[var(--foreground)]">“{entry.reviewReason}”</p>}
+              </li>
+            ))}
+          </ul>
+        </div>
 
-      {dialog === 'reject' && (
-        <ReasonDialog
-          title="Reject Submission"
-          actionLabel="Reject"
-          onCancel={() => setDialog(null)}
-          onConfirm={async (reason) => {
-            await runAction('reject', { reason });
-            setDialog(null);
-          }}
-        />
-      )}
-      {dialog === 'request-changes' && (
-        <ReasonDialog
-          title="Request Changes"
-          actionLabel="Request Changes"
-          onCancel={() => setDialog(null)}
-          onConfirm={async (reason) => {
-            await runAction('request-changes', { reason });
-            setDialog(null);
-          }}
-        />
-      )}
-      {dialog === 'unpublish' && (
-        <ReasonDialog
-          title="Unpublish Listing"
-          actionLabel="Unpublish"
-          onCancel={() => setDialog(null)}
-          onConfirm={async (reason) => {
-            await runAction('unpublish', { reason });
-            setDialog(null);
-          }}
-        />
-      )}
+        {dialog === 'reject' && (
+          <ReasonDialog
+            title="Reject Submission"
+            actionLabel="Reject"
+            onCancel={() => setDialog(null)}
+            onConfirm={async (reason) => {
+              await runAction('reject', { reason });
+              setDialog(null);
+            }}
+          />
+        )}
+        {dialog === 'request-changes' && (
+          <ReasonDialog
+            title="Request Changes"
+            actionLabel="Request Changes"
+            onCancel={() => setDialog(null)}
+            onConfirm={async (reason) => {
+              await runAction('request-changes', { reason });
+              setDialog(null);
+            }}
+          />
+        )}
+        {dialog === 'unpublish' && (
+          <ReasonDialog
+            title="Unpublish Listing"
+            actionLabel="Unpublish"
+            onCancel={() => setDialog(null)}
+            onConfirm={async (reason) => {
+              await runAction('unpublish', { reason });
+              setDialog(null);
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 }

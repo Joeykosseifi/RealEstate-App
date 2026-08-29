@@ -1,5 +1,6 @@
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
 import type { PublicPropertyListItem } from '../../api/types';
+import { colors, priceText, radii, shadows, spacing, typography } from '../../theme';
 
 /**
  * Shared marketplace card — reused by Home, Search, and Favorites so the
@@ -7,6 +8,8 @@ import type { PublicPropertyListItem } from '../../api/types';
  * docs/PERMISSIONS.md "Marketplace property card"). Never renders owner
  * info, commission, internal notes, or exact private location — it
  * simply has no such fields to read from `PublicPropertyListItem`.
+ * Photography carries more visual weight here than on the professional
+ * database's compact `PropertyCard` (Milestone 7 spec §20).
  */
 export function ListingCard({
   listing,
@@ -15,11 +18,11 @@ export function ListingCard({
 }: {
   listing: PublicPropertyListItem;
   onPress: () => void;
-  style?: object;
+  style?: StyleProp<ViewStyle>;
 }) {
   const location = [listing.location.city, listing.location.area].filter(Boolean).join(', ');
   return (
-    <TouchableOpacity style={[styles.card, style]} onPress={onPress}>
+    <TouchableOpacity style={[styles.card, style]} onPress={onPress} activeOpacity={0.85}>
       {listing.mainImage?.url ? (
         <Image source={{ uri: listing.mainImage.url }} style={styles.image} resizeMode="cover" />
       ) : (
@@ -28,24 +31,24 @@ export function ListingCard({
         </View>
       )}
       <View style={styles.body}>
-        <Text style={styles.price}>
+        <Text style={priceText}>
           {listing.currency} {listing.price.toLocaleString()}
         </Text>
-        <Text style={styles.title} numberOfLines={1}>
+        <Text style={typography.h3} numberOfLines={1}>
           {listing.title}
         </Text>
-        <Text style={styles.subtitle} numberOfLines={1}>
+        <Text style={typography.bodySmall} numberOfLines={1}>
           {listing.propertyType} · {listing.listingPurpose === 'SALE' ? 'For Sale' : 'For Rent'}
         </Text>
         {location ? (
-          <Text style={styles.location} numberOfLines={1}>
+          <Text style={typography.caption} numberOfLines={1}>
             {location}
           </Text>
         ) : null}
-        <Text style={styles.meta}>
+        <Text style={typography.caption}>
           {listing.bedrooms !== null ? `${listing.bedrooms} bd` : ''}
           {listing.bathrooms !== null ? ` · ${listing.bathrooms} ba` : ''}
-          {listing.areaSqm !== null ? ` · ${listing.areaSqm} sqm` : ''}
+          {listing.areaSqm !== null ? ` · ${listing.areaSqm} m²` : ''}
         </Text>
         <Text style={styles.identity} numberOfLines={1}>
           {listing.identity.displayName}
@@ -57,21 +60,17 @@ export function ListingCard({
 
 const styles = StyleSheet.create({
   card: {
-    width: 220,
-    borderRadius: 12,
-    backgroundColor: '#fff',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e0e0e0',
+    width: 230,
+    borderRadius: radii.cardLarge,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
     overflow: 'hidden',
+    ...shadows.sm,
   },
-  image: { width: '100%', height: 130, backgroundColor: '#eee' },
+  image: { width: '100%', height: 150, backgroundColor: colors.border },
   imagePlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  imagePlaceholderText: { color: '#999', fontSize: 12 },
-  body: { padding: 10, gap: 2 },
-  price: { fontSize: 16, fontWeight: '700', color: '#1a73e8' },
-  title: { fontSize: 14, fontWeight: '600' },
-  subtitle: { fontSize: 12, color: '#666' },
-  location: { fontSize: 12, color: '#888' },
-  meta: { fontSize: 12, color: '#888' },
-  identity: { fontSize: 11, color: '#aaa', marginTop: 4 },
+  imagePlaceholderText: { color: colors.text.secondary, fontSize: 12 },
+  body: { padding: spacing.smd, gap: 2 },
+  identity: { fontSize: 11, color: colors.text.secondary, marginTop: spacing.xs },
 });

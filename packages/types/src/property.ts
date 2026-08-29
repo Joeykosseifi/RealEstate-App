@@ -1,3 +1,5 @@
+import type { PropertyPublicationStatus } from './publication';
+
 export type PropertyType =
   | 'APARTMENT'
   | 'VILLA'
@@ -111,6 +113,13 @@ export interface PropertyListItem {
   city: string | null;
   area: string | null;
   primaryMedia: PropertyMediaSummary | null;
+  /**
+   * `null` when the property has no `PropertyPublication` row at all —
+   * i.e. it's private (see docs/PRODUCT.md "Property status — two
+   * separate badges, always"). Always distinct from `propertyStatus`
+   * (the business status) — never merge the two into one label.
+   */
+  publicationStatus: PropertyPublicationStatus | null;
   createdAt: string;
   updatedAt: string;
 }

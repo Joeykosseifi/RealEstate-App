@@ -1,22 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../auth/AuthContext';
 import { listShortlist, removeFromShortlist } from '../../api/clients';
 import { ApiError } from '../../api/client';
 import type { ClientPropertyShortlistItem } from '../../api/types';
 import type { ClientsStackParamList } from '../../navigation/ClientsStack';
+import { Button, Card, EmptyState, ErrorState, LoadingState, confirmDestructive } from '../../components/ui';
+import { colors, radii, screenPadding, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<ClientsStackParamList, 'Shortlist'>;
 
+/** Shortlist management (Milestone 7 spec §27) — select shortlisted properties, then "Generate Presentation" is the obvious next action. */
 export function ShortlistScreen({ route, navigation }: Props): React.JSX.Element {
   const { clientId } = route.params;
   const { currentWorkspace } = useAuth();
@@ -50,36 +45,22 @@ export function ShortlistScreen({ route, navigation }: Props): React.JSX.Element
   const toggleSelected = (propertyId: string) => {
     setSelected((current) => {
       const next = new Set(current);
-      if (next.has(propertyId)) {
-        next.delete(propertyId);
-      } else {
-        next.add(propertyId);
-      }
+      if (next.has(propertyId)) next.delete(propertyId);
+      else next.add(propertyId);
       return next;
     });
   };
 
-  const onRemove = (shortlistId: string) => {
-    if (!currentWorkspace) return;
-    Alert.alert('Remove from shortlist?', undefined, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await removeFromShortlist(currentWorkspace.id, clientId, shortlistId);
-            void load();
-          } catch (err) {
-            Alert.alert(
-              'Could not remove',
-              err instanceof ApiError ? err.message : 'Please try again.',
-            );
-          }
-        },
-      },
-    ]);
-  };
+  const onRemove = (shortlistId: string) =>
+    confirmDestructive('Remove from shortlist?', undefined, 'Remove', async () => {
+      if (!currentWorkspace) return;
+      try {
+        await removeFromShortlist(currentWorkspace.id, clientId, shortlistId);
+        void load();
+      } catch (err) {
+        Alert.alert('Could not remove', err instanceof ApiError ? err.message : 'Please try again.');
+      }
+    });
 
   const onCreatePresentation = () => {
     if (selected.size === 0) {
@@ -89,16 +70,8 @@ export function ShortlistScreen({ route, navigation }: Props): React.JSX.Element
     navigation.navigate('CreatePresentation', { clientId, propertyIds: [...selected] });
   };
 
-  if (loading) {
-    return <ActivityIndicator style={styles.center} />;
-  }
-  if (error) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.error}>{error}</Text>
-      </View>
-    );
-  }
+  if (loading) return <LoadingState />;
+  if (error) return <ErrorState message={error} onRetry={() => void load()} />;
 
   return (
     <View style={styles.container}>
@@ -109,69 +82,48 @@ export function ShortlistScreen({ route, navigation }: Props): React.JSX.Element
         renderItem={({ item }) => {
           const isSelected = selected.has(item.propertyId);
           return (
-            <TouchableOpacity
-              style={[styles.row, isSelected && styles.rowSelected]}
-              onPress={() => toggleSelected(item.propertyId)}
-            >
-              <View style={styles.rowContent}>
-                <Text style={styles.rowTitle}>{item.property.title}</Text>
-                <Text style={styles.rowSubtitle}>
-                  {item.property.currency} {item.property.price.toLocaleString()} ·{' '}
-                  {[item.property.city, item.property.area].filter(Boolean).join(', ')}
-                </Text>
-                {item.note ? <Text style={styles.note}>{item.note}</Text> : null}
+            <Card onPress={() => toggleSelected(item.propertyId)} style={[styles.row, isSelected && styles.rowSelected]}>
+              <View style={styles.rowInner}>
+                <View style={styles.rowContent}>
+                  <Text style={typography.h3}>{item.property.title}</Text>
+                  <Text style={typography.bodySmall}>
+                    {item.property.currency} {item.property.price.toLocaleString()} ·{' '}
+                    {[item.property.city, item.property.area].filter(Boolean).join(', ')}
+                  </Text>
+                  {item.note ? <Text style={styles.note}>{item.note}</Text> : null}
+                </View>
+                <TouchableOpacity onPress={() => onRemove(item.id)}>
+                  <Text style={styles.removeText}>Remove</Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity onPress={() => onRemove(item.id)}>
-                <Text style={styles.removeText}>Remove</Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
+            </Card>
           );
         }}
-        ListEmptyComponent={
-          <View style={styles.center}>
-            <Text>No properties shortlisted yet.</Text>
-          </View>
-        }
+        ListEmptyComponent={<EmptyState icon="⭐" title="No properties shortlisted yet." />}
       />
-      <TouchableOpacity style={styles.presentButton} onPress={onCreatePresentation}>
-        <Text style={styles.presentButtonText}>
-          Create Presentation{selected.size > 0 ? ` (${selected.size})` : ''}
-        </Text>
-      </TouchableOpacity>
+      <Button
+        label={`Create Presentation${selected.size > 0 ? ` (${selected.size})` : ''}`}
+        onPress={onCreatePresentation}
+        style={styles.presentButton}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  content: { padding: 16, paddingBottom: 96 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  error: { color: '#c0392b' },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  rowSelected: { borderColor: '#1a73e8', backgroundColor: '#eef4ff' },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: screenPadding, paddingBottom: 96 },
+  row: { marginBottom: spacing.sm },
+  rowSelected: { borderColor: colors.brand.primaryNavy, backgroundColor: colors.selectedTint },
+  rowInner: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   rowContent: { flex: 1 },
-  rowTitle: { fontSize: 15, fontWeight: '600' },
-  rowSubtitle: { color: '#666', fontSize: 13, marginTop: 2 },
-  note: { color: '#888', fontSize: 12, marginTop: 4, fontStyle: 'italic' },
-  removeText: { color: '#c0392b', fontSize: 13 },
+  note: { color: colors.text.secondary, fontSize: 12, marginTop: spacing.xs, fontStyle: 'italic' },
+  removeText: { color: colors.danger, fontSize: 13 },
   presentButton: {
     position: 'absolute',
-    bottom: 16,
-    left: 16,
-    right: 16,
-    backgroundColor: '#1a73e8',
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
+    bottom: spacing.md,
+    left: spacing.lg,
+    right: spacing.lg,
+    borderRadius: radii.button,
   },
-  presentButtonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
 });

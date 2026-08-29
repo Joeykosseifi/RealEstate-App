@@ -1,38 +1,33 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { AuthStackParamList } from '../../navigation/AuthStack';
+import { Button } from '../../components/ui';
+import { colors, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Welcome'>;
 
 /**
- * The unauthenticated app's entry point (Milestone 6.1) — Welcome →
- * Sign In / Create Account. Kept functional and plain; the full visual
- * design system is a later milestone (see the M6.1 spec).
+ * The unauthenticated app's entry point (Milestone 6.1, restyled in
+ * Milestone 7) — Welcome → Sign In / Create Account. Deliberately no
+ * onboarding carousel: get the user into the app quickly.
  */
 export function WelcomeScreen({ navigation }: Props): React.JSX.Element {
   return (
     <View style={styles.container}>
       <View style={styles.hero}>
-        <Text style={styles.title}>Real Estate Platform</Text>
-        <Text style={styles.subtitle}>
-          Browse the marketplace as a client, or manage your own property business as an agent or
-          company.
+        <View style={styles.mark}>
+          <Text style={styles.markText}>PB</Text>
+        </View>
+        <Text style={[typography.display, styles.title]}>ProBase</Text>
+        <Text style={[typography.body, styles.subtitle]}>
+          A secure private property database, CRM, and marketplace for real estate professionals
+          and clients.
         </Text>
       </View>
 
       <View style={styles.actions}>
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={() => navigation.navigate('CreateAccount')}
-        >
-          <Text style={styles.primaryButtonText}>Create Account</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.secondaryButton}
-          onPress={() => navigation.navigate('SignIn')}
-        >
-          <Text style={styles.secondaryButtonText}>Sign In</Text>
-        </TouchableOpacity>
+        <Button label="Create Account" onPress={() => navigation.navigate('CreateAccount')} />
+        <Button label="Sign In" variant="secondary" onPress={() => navigation.navigate('SignIn')} />
       </View>
     </View>
   );
@@ -41,27 +36,22 @@ export function WelcomeScreen({ navigation }: Props): React.JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    padding: 24,
+    backgroundColor: colors.background,
+    padding: spacing.xl,
     justifyContent: 'space-between',
   },
-  hero: { flex: 1, justifyContent: 'center' },
-  title: { fontSize: 30, fontWeight: '700', textAlign: 'center', marginBottom: 12 },
-  subtitle: { fontSize: 15, color: '#666', textAlign: 'center', lineHeight: 22 },
-  actions: { gap: 12, paddingBottom: 24 },
-  primaryButton: {
-    backgroundColor: '#1a73e8',
-    borderRadius: 8,
-    padding: 16,
+  hero: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  mark: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    backgroundColor: colors.brand.primaryNavy,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
   },
-  primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  secondaryButton: {
-    borderWidth: 1,
-    borderColor: '#1a73e8',
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
-  },
-  secondaryButtonText: { color: '#1a73e8', fontSize: 16, fontWeight: '600' },
+  markText: { fontSize: 22, fontWeight: '700', color: colors.text.inverse },
+  title: { color: colors.brand.deepNavy, marginBottom: spacing.smd },
+  subtitle: { color: colors.text.secondary, textAlign: 'center', paddingHorizontal: spacing.md },
+  actions: { gap: spacing.smd, paddingBottom: spacing.xl },
 });

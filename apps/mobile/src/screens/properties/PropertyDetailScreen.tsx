@@ -1,14 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../auth/AuthContext';
@@ -26,7 +17,6 @@ import {
   republishListing,
   unpublishListing,
 } from '../../api/publications';
-import { getPublicationStatusLabel } from '../../publications/publicationStatus';
 import { ApiError } from '../../api/client';
 import type { PropertyDetail, PublicationDetail } from '../../api/types';
 import { MapLocationPicker } from '../../location/MapLocationPicker';
@@ -36,27 +26,49 @@ import {
   type LocationDraft,
 } from '../../location/locationPayload';
 import type { PropertiesStackParamList } from '../../navigation/PropertiesStack';
+import {
+  BusinessStatusBadge,
+  Button,
+  Card,
+  ErrorState,
+  FilterChip,
+  IconButton,
+  LoadingState,
+  PublicationStatusBadge,
+  confirmDestructive,
+} from '../../components/ui';
+import { colors, priceText, radii, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<PropertiesStackParamList, 'PropertyDetail'>;
+type Tab = 'details' | 'photos' | 'location' | 'private';
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.detailRow}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value}</Text>
+      <Text style={typography.bodySmall}>{label}</Text>
+      <Text style={[typography.body, styles.detailValue]}>{value}</Text>
     </View>
   );
 }
 
+/**
+ * Property detail (Milestone 7 spec §15 — image-first header, business
+ * status + publication status ALWAYS as two separate badges, then
+ * Details | Photos | Location | Private tabs). The Private tab is only
+ * ever rendered when the API actually included `owners`/`privateDetails`
+ * — DTO omission, not client-side hiding, is what keeps it from a
+ * caller who lacks the permission (see docs/PERMISSIONS.md "Property
+ * DTO omission policy") — this UI just reflects that.
+ */
 export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.Element {
   const { propertyId } = route.params;
   const { currentWorkspace, permissions } = useAuth();
   const [property, setProperty] = useState<PropertyDetail | null>(null);
   const [publication, setPublication] = useState<PublicationDetail | null>(null);
-  const [primaryImageUrl, setPrimaryImageUrl] = useState<string | null>(null);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>('details');
   const [mapVisible, setMapVisible] = useState(false);
   const [savingLocation, setSavingLocation] = useState(false);
   const [publicationActionPending, setPublicationActionPending] = useState(false);
@@ -73,14 +85,6 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
       ]);
       setProperty(detail);
       setPublication(pub);
-      if (detail.primaryMedia) {
-        const { url } = await getMediaAccessUrl(
-          currentWorkspace.id,
-          propertyId,
-          detail.primaryMedia.id,
-        );
-        setPrimaryImageUrl(url);
-      }
       const images = detail.media.filter((m) => m.mediaType === 'IMAGE');
       const resolved = await Promise.all(
         images.map(async (media) => {
@@ -110,44 +114,26 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
     if (!currentWorkspace) return;
     setSavingLocation(true);
     try {
-      const updated = await updatePropertyLocation(
-        currentWorkspace.id,
-        propertyId,
-        toLocationDto(draft),
-      );
+      const updated = await updatePropertyLocation(currentWorkspace.id, propertyId, toLocationDto(draft));
       setProperty(updated);
       setMapVisible(false);
     } catch (err) {
-      Alert.alert(
-        'Could not save location',
-        err instanceof ApiError ? err.message : 'Please try again.',
-      );
+      Alert.alert('Could not save location', err instanceof ApiError ? err.message : 'Please try again.');
     } finally {
       setSavingLocation(false);
     }
   };
 
-  const onArchive = () => {
-    if (!currentWorkspace) return;
-    Alert.alert('Archive property', 'This can be restored later. Continue?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Archive',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await archiveProperty(currentWorkspace.id, propertyId);
-            navigation.goBack();
-          } catch (err) {
-            Alert.alert(
-              'Could not archive',
-              err instanceof ApiError ? err.message : 'Please try again.',
-            );
-          }
-        },
-      },
-    ]);
-  };
+  const onArchive = () =>
+    confirmDestructive('Archive property', 'This can be restored later. Continue?', 'Archive', async () => {
+      if (!currentWorkspace) return;
+      try {
+        await archiveProperty(currentWorkspace.id, propertyId);
+        navigation.goBack();
+      } catch (err) {
+        Alert.alert('Could not archive', err instanceof ApiError ? err.message : 'Please try again.');
+      }
+    });
 
   const onRestore = async () => {
     if (!currentWorkspace) return;
@@ -166,16 +152,10 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
     if (!currentWorkspace) return;
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert(
-        'Photo access needed',
-        'Allow photo library access in Settings to add property photos.',
-      );
+      Alert.alert('Photo access needed', 'Allow photo library access in Settings to add property photos.');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images',
-      quality: 0.8,
-    });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.8 });
     if (result.canceled || result.assets.length === 0) return;
 
     const asset = result.assets[0];
@@ -184,19 +164,12 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
       await uploadPropertyMedia(
         currentWorkspace.id,
         propertyId,
-        {
-          uri: asset.uri,
-          name: asset.fileName ?? `photo-${Date.now()}.jpg`,
-          type: asset.mimeType ?? 'image/jpeg',
-        },
+        { uri: asset.uri, name: asset.fileName ?? `photo-${Date.now()}.jpg`, type: asset.mimeType ?? 'image/jpeg' },
         'IMAGE',
       );
       await load();
     } catch (err) {
-      Alert.alert(
-        'Could not upload photo',
-        err instanceof ApiError ? err.message : 'Please try again.',
-      );
+      Alert.alert('Could not upload photo', err instanceof ApiError ? err.message : 'Please try again.');
     } finally {
       setUploadingPhoto(false);
     }
@@ -218,299 +191,222 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
     }
   };
 
-  const onCancelSubmission = () =>
-    runPublicationAction(cancelPublicationSubmission, 'Could not cancel submission');
-
+  const onCancelSubmission = () => runPublicationAction(cancelPublicationSubmission, 'Could not cancel submission');
   const onUnpublish = () =>
-    Alert.alert('Unpublish listing', 'This removes it from the public marketplace. Continue?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Unpublish',
-        style: 'destructive',
-        onPress: () => runPublicationAction(unpublishListing, 'Could not unpublish'),
-      },
-    ]);
-
+    confirmDestructive('Unpublish listing', 'This removes it from the public marketplace. Continue?', 'Unpublish', () =>
+      runPublicationAction(unpublishListing, 'Could not unpublish'),
+    );
   const onRepublish = () => runPublicationAction(republishListing, 'Could not republish');
 
-  if (loading) {
-    return <ActivityIndicator style={styles.center} />;
-  }
+  if (loading) return <LoadingState />;
   if (error || !property) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.error}>{error ?? 'Property not found.'}</Text>
-      </View>
-    );
+    return <ErrorState message={error ?? 'Property not found.'} onRetry={() => void load()} />;
   }
+
+  const images = property.media.filter((m) => m.mediaType === 'IMAGE');
+  const heroUrl = property.primaryMedia ? photoUrls[property.primaryMedia.id] : undefined;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {primaryImageUrl ? (
-        <Image source={{ uri: primaryImageUrl }} style={styles.image} resizeMode="cover" />
-      ) : (
-        <View style={[styles.image, styles.imagePlaceholder]}>
-          <Text style={styles.imagePlaceholderText}>No photo yet</Text>
-        </View>
-      )}
+      <View style={styles.heroWrap}>
+        {heroUrl ? (
+          <Image source={{ uri: heroUrl }} style={styles.hero} resizeMode="cover" />
+        ) : (
+          <View style={[styles.hero, styles.heroPlaceholder]}>
+            <Text style={typography.bodySmall}>No photo yet</Text>
+          </View>
+        )}
+        {images.length > 0 ? (
+          <View style={styles.photoCountBadge}>
+            <Text style={styles.photoCountText}>📷 {images.length}</Text>
+          </View>
+        ) : null}
+      </View>
 
       <View style={styles.titleRow}>
-        <Text style={styles.title}>{property.title}</Text>
+        <Text style={[typography.h1, styles.titleText]}>{property.title}</Text>
         {permissions.has('property.edit') && property.propertyStatus !== 'ARCHIVED' && (
-          <TouchableOpacity
-            style={styles.editButton}
+          <IconButton
+            icon={<Text style={styles.editIcon}>✎</Text>}
             onPress={() => navigation.navigate('EditProperty', { propertyId })}
-          >
-            <Text style={styles.editButtonText}>Edit</Text>
-          </TouchableOpacity>
+            accessibilityLabel="Edit property"
+            variant="filled"
+          />
         )}
       </View>
-      <Text style={styles.price}>
+      <Text style={priceText}>
         {property.currency} {property.price.toLocaleString()}
       </Text>
-      <Text style={styles.status}>
-        {property.propertyStatus} · {property.propertyType} · {property.listingPurpose}
-      </Text>
-      {property.propertyStatus === 'ARCHIVED' && (
-        <View style={styles.archivedBanner}>
-          <Text style={styles.archivedBannerText}>
-            This property is archived — it no longer appears in your active list.
-          </Text>
-        </View>
+      {(property.city || property.area) && (
+        <Text style={typography.bodySmall}>{[property.area, property.city].filter(Boolean).join(', ')}</Text>
       )}
 
-      <View style={[styles.section, styles.publicationSection]}>
-        <Text style={styles.sectionTitle}>
-          Marketplace Listing · {getPublicationStatusLabel(publication?.status ?? null)}
-        </Text>
+      <View style={styles.badgeRow}>
+        <BusinessStatusBadge status={property.propertyStatus} />
+        <PublicationStatusBadge status={publication?.status ?? null} />
+      </View>
+
+      {property.propertyStatus === 'ARCHIVED' && (
+        <Card style={styles.archivedBanner}>
+          <Text style={styles.archivedBannerText}>This property is archived — it no longer appears in your active list.</Text>
+        </Card>
+      )}
+
+      <Card style={styles.publicationCard}>
+        <Text style={typography.label}>Marketplace Listing</Text>
         {!publication && (
           <>
             <Text style={styles.hint}>Private — not prepared for the marketplace yet.</Text>
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={() => navigation.navigate('PublishProperty', { propertyId })}
-            >
-              <Text style={styles.secondaryButtonText}>Prepare Listing</Text>
-            </TouchableOpacity>
+            <Button label="Prepare Listing" size="sm" variant="secondary" onPress={() => navigation.navigate('PublishProperty', { propertyId })} style={styles.pubButton} />
           </>
         )}
         {publication?.status === 'DRAFT' && (
           <>
             <Text style={styles.hint}>Draft — not yet submitted for review.</Text>
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={() => navigation.navigate('PublishProperty', { propertyId })}
-            >
-              <Text style={styles.secondaryButtonText}>Edit Public Listing</Text>
-            </TouchableOpacity>
+            <Button label="Edit Public Listing" size="sm" variant="secondary" onPress={() => navigation.navigate('PublishProperty', { propertyId })} style={styles.pubButton} />
           </>
         )}
         {publication?.status === 'PENDING_REVIEW' && (
           <>
             <Text style={styles.hint}>Under review by the platform team.</Text>
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={onCancelSubmission}
-              disabled={publicationActionPending}
-            >
-              <Text style={styles.secondaryButtonText}>Cancel Submission</Text>
-            </TouchableOpacity>
+            <Button label="Cancel Submission" size="sm" variant="secondary" onPress={onCancelSubmission} disabled={publicationActionPending} style={styles.pubButton} />
           </>
         )}
         {publication?.status === 'CHANGES_REQUESTED' && (
           <>
-            <Text style={styles.warningText}>
-              Changes requested: {publication.changesRequestedReason}
-            </Text>
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={() => navigation.navigate('PublishProperty', { propertyId })}
-            >
-              <Text style={styles.secondaryButtonText}>Edit & Resubmit</Text>
-            </TouchableOpacity>
+            <Text style={styles.warningText}>Changes requested: {publication.changesRequestedReason}</Text>
+            <Button label="Edit & Resubmit" size="sm" variant="secondary" onPress={() => navigation.navigate('PublishProperty', { propertyId })} style={styles.pubButton} />
           </>
         )}
         {publication?.status === 'REJECTED' && (
           <>
             <Text style={styles.warningText}>Rejected: {publication.rejectionReason}</Text>
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={() => navigation.navigate('PublishProperty', { propertyId })}
-            >
-              <Text style={styles.secondaryButtonText}>Edit & Resubmit</Text>
-            </TouchableOpacity>
+            <Button label="Edit & Resubmit" size="sm" variant="secondary" onPress={() => navigation.navigate('PublishProperty', { propertyId })} style={styles.pubButton} />
           </>
         )}
         {publication?.status === 'PUBLISHED' && (
           <>
             <Text style={styles.hint}>Live on the public marketplace.</Text>
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={() => navigation.navigate('PublishProperty', { propertyId })}
-            >
-              <Text style={styles.secondaryButtonText}>Edit Listing</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.archiveButton}
-              onPress={onUnpublish}
-              disabled={publicationActionPending}
-            >
-              <Text style={styles.archiveButtonText}>Unpublish</Text>
-            </TouchableOpacity>
+            <View style={styles.pubButtonRow}>
+              <Button label="Edit Listing" size="sm" variant="secondary" onPress={() => navigation.navigate('PublishProperty', { propertyId })} />
+              <Button label="Unpublish" size="sm" variant="destructive" onPress={onUnpublish} disabled={publicationActionPending} />
+            </View>
           </>
         )}
         {publication?.status === 'ADMIN_UNPUBLISHED' && (
-          <Text style={styles.warningText}>
-            Removed by the platform team: {publication.unpublishReason}
-          </Text>
+          <Text style={styles.warningText}>Removed by the platform team: {publication.unpublishReason}</Text>
         )}
         {publication?.status === 'OWNER_UNPUBLISHED' && (
           <>
             <Text style={styles.hint}>Unpublished by you — property stays in your database.</Text>
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={onRepublish}
-              disabled={publicationActionPending}
-            >
-              <Text style={styles.secondaryButtonText}>Republish</Text>
-            </TouchableOpacity>
+            <Button label="Republish" size="sm" variant="secondary" onPress={onRepublish} disabled={publicationActionPending} style={styles.pubButton} />
           </>
         )}
-        {publication?.status === 'ARCHIVED' && (
-          <Text style={styles.hint}>Archived — no longer eligible for the marketplace.</Text>
-        )}
-      </View>
+        {publication?.status === 'ARCHIVED' && <Text style={styles.hint}>Archived — no longer eligible for the marketplace.</Text>}
+      </Card>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Details</Text>
-        <Row label="Bedrooms" value={property.bedrooms?.toString() ?? '—'} />
-        <Row label="Bathrooms" value={property.bathrooms?.toString() ?? '—'} />
-        <Row label="Area" value={property.areaSqm ? `${property.areaSqm} sqm` : '—'} />
-        {property.description ? (
-          <Text style={styles.description}>{property.description}</Text>
+      <View style={styles.tabsRow}>
+        <FilterChip label="Details" selected={tab === 'details'} onPress={() => setTab('details')} />
+        <FilterChip label="Photos" selected={tab === 'photos'} onPress={() => setTab('photos')} />
+        {property.location ? (
+          <FilterChip label="Location" selected={tab === 'location'} onPress={() => setTab('location')} />
+        ) : null}
+        {(property.owners || property.privateDetails) ? (
+          <FilterChip label="🔒 Private" selected={tab === 'private'} onPress={() => setTab('private')} />
         ) : null}
       </View>
 
-      {property.propertyStatus !== 'ARCHIVED' && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Photos</Text>
-          {property.media.filter((m) => m.mediaType === 'IMAGE').length === 0 ? (
+      {tab === 'details' && (
+        <Card style={styles.tabCard}>
+          <Row label="Bedrooms" value={property.bedrooms?.toString() ?? '—'} />
+          <Row label="Bathrooms" value={property.bathrooms?.toString() ?? '—'} />
+          <Row label="Area" value={property.areaSqm ? `${property.areaSqm} m²` : '—'} />
+          <Row label="Type" value={property.propertyType} />
+          <Row label="Purpose" value={property.listingPurpose} />
+          {property.description ? <Text style={[typography.body, styles.description]}>{property.description}</Text> : null}
+          {property.features.filter((f) => f.value).length > 0 && (
+            <View style={styles.chipRow}>
+              {property.features
+                .filter((f) => f.value)
+                .map((feature) => (
+                  <View key={feature.featureKey} style={styles.featureChip}>
+                    <Text style={styles.featureChipText}>{feature.featureKey}</Text>
+                  </View>
+                ))}
+            </View>
+          )}
+        </Card>
+      )}
+
+      {tab === 'photos' && property.propertyStatus !== 'ARCHIVED' && (
+        <Card style={styles.tabCard}>
+          {images.length === 0 ? (
             <Text style={styles.hint}>No photos yet.</Text>
           ) : (
-            <View style={styles.photoRow}>
-              {property.media
-                .filter((m) => m.mediaType === 'IMAGE')
-                .map((media) =>
-                  photoUrls[media.id] ? (
-                    <Image
-                      key={media.id}
-                      source={{ uri: photoUrls[media.id] }}
-                      style={styles.photoThumb}
-                    />
-                  ) : (
-                    <View key={media.id} style={[styles.photoThumb, styles.imagePlaceholder]} />
-                  ),
-                )}
+            <View style={styles.photoGrid}>
+              {images.map((media) =>
+                photoUrls[media.id] ? (
+                  <Image key={media.id} source={{ uri: photoUrls[media.id] }} style={styles.photoThumb} />
+                ) : (
+                  <View key={media.id} style={[styles.photoThumb, styles.heroPlaceholder]} />
+                ),
+              )}
             </View>
           )}
           {permissions.has('property.edit') && (
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={() => void onAddPhoto()}
-              disabled={uploadingPhoto}
-            >
-              {uploadingPhoto ? (
-                <ActivityIndicator color="#1a73e8" />
-              ) : (
-                <Text style={styles.secondaryButtonText}>Add Photo</Text>
-              )}
-            </TouchableOpacity>
+            <Button label="Add Photo" size="sm" variant="secondary" onPress={() => void onAddPhoto()} loading={uploadingPhoto} style={styles.pubButton} />
           )}
-        </View>
+        </Card>
       )}
 
-      {property.features.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Features</Text>
-          <View style={styles.chipRow}>
-            {property.features
-              .filter((feature) => feature.value)
-              .map((feature) => (
-                <View key={feature.featureKey} style={styles.chip}>
-                  <Text style={styles.chipText}>{feature.featureKey}</Text>
-                </View>
-              ))}
-          </View>
-        </View>
-      )}
-
-      {/* Present only when the API included it — see docs/PERMISSIONS.md
-          "Property DTO omission policy". No placeholder is shown for a
-          section the caller isn't authorized to see, by design. */}
-      {property.location && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Location</Text>
+      {tab === 'location' && property.location && (
+        <Card style={styles.tabCard}>
           <Row label="City" value={property.location.city ?? '—'} />
           <Row label="Area" value={property.location.area ?? '—'} />
-          <Row
-            label="Coordinates"
-            value={`${property.location.latitude.toFixed(6)}, ${property.location.longitude.toFixed(6)}`}
-          />
-          <Text style={styles.hint}>
-            Exact location — private, visible only to authorized professionals.
-          </Text>
-          <TouchableOpacity style={styles.editLocationButton} onPress={() => setMapVisible(true)}>
-            <Text style={styles.editLocationButtonText}>Edit Location</Text>
-          </TouchableOpacity>
-        </View>
+          <Row label="Coordinates" value={`${property.location.latitude.toFixed(6)}, ${property.location.longitude.toFixed(6)}`} />
+          <Text style={styles.hint}>Exact location — private, visible only to authorized professionals.</Text>
+          <Button label="Edit Location" size="sm" variant="secondary" onPress={() => setMapVisible(true)} style={styles.pubButton} />
+        </Card>
       )}
 
-      {property.owners && property.owners.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Owner</Text>
-          {property.owners.map((owner) => (
-            <View key={owner.id} style={styles.ownerBlock}>
-              <Text style={styles.detailValue}>{owner.fullName}</Text>
-              {owner.phone ? <Text style={styles.detailLabel}>{owner.phone}</Text> : null}
+      {tab === 'private' && (
+        <Card style={styles.tabCard}>
+          <Text style={styles.lockNotice}>🔒 Only authorized workspace members can see this section.</Text>
+          {property.owners && property.owners.length > 0 && (
+            <View style={styles.privateBlock}>
+              <Text style={typography.label}>Owner</Text>
+              {property.owners.map((owner) => (
+                <View key={owner.id} style={styles.ownerBlock}>
+                  <Text style={typography.body}>{owner.fullName}</Text>
+                  {owner.phone ? <Text style={typography.bodySmall}>{owner.phone}</Text> : null}
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
-      )}
-
-      {property.privateDetails && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Private Notes</Text>
-          {property.privateDetails.internalNotes ? (
-            <Text style={styles.description}>{property.privateDetails.internalNotes}</Text>
-          ) : null}
-          {property.privateDetails.commissionNotes !== undefined && (
-            <>
-              <Text style={[styles.sectionTitle, styles.commissionTitle]}>Commission</Text>
-              <Text style={styles.description}>
-                {property.privateDetails.commissionNotes ?? '—'}
-              </Text>
-            </>
           )}
-        </View>
+          {property.privateDetails && (
+            <View style={styles.privateBlock}>
+              <Text style={typography.label}>Internal Notes</Text>
+              <Text style={[typography.body, styles.description]}>
+                {property.privateDetails.internalNotes ?? '—'}
+              </Text>
+              {property.privateDetails.commissionNotes !== undefined && (
+                <>
+                  <Text style={[typography.label, styles.commissionTitle]}>Commission</Text>
+                  <Text style={[typography.body, styles.description]}>
+                    {property.privateDetails.commissionNotes ?? '—'}
+                  </Text>
+                </>
+              )}
+            </View>
+          )}
+        </Card>
       )}
 
       {permissions.has('property.archive') &&
         (property.propertyStatus === 'ARCHIVED' ? (
-          <TouchableOpacity
-            style={styles.restoreButton}
-            onPress={() => void onRestore()}
-            disabled={restoring}
-          >
-            {restoring ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.restoreButtonText}>Restore Property</Text>
-            )}
-          </TouchableOpacity>
+          <Button label="Restore Property" onPress={() => void onRestore()} loading={restoring} style={styles.bottomAction} />
         ) : (
-          <TouchableOpacity style={styles.archiveButton} onPress={onArchive}>
-            <Text style={styles.archiveButtonText}>Archive Property</Text>
-          </TouchableOpacity>
+          <Button label="Archive Property" variant="destructive" onPress={onArchive} style={styles.bottomAction} />
         ))}
 
       {property.location && (
@@ -523,7 +419,7 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
       )}
       {savingLocation && (
         <View style={styles.savingOverlay}>
-          <ActivityIndicator color="#fff" />
+          <LoadingState />
         </View>
       )}
     </ScrollView>
@@ -531,105 +427,54 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  content: { padding: 16, paddingBottom: 48 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  error: { color: '#c0392b' },
-  image: {
-    width: '100%',
-    height: 220,
-    borderRadius: 12,
-    marginBottom: 16,
-    backgroundColor: '#eee',
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.lg, paddingBottom: 48 },
+  heroWrap: { marginBottom: spacing.md },
+  hero: { width: '100%', height: 220, borderRadius: radii.image, backgroundColor: colors.border },
+  heroPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  photoCountBadge: {
+    position: 'absolute',
+    right: spacing.sm,
+    bottom: spacing.sm,
+    backgroundColor: 'rgba(15,31,51,0.7)',
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
   },
-  imagePlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  imagePlaceholderText: { color: '#999' },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontSize: 22, fontWeight: '700', flexShrink: 1 },
-  editButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#eef4ff',
-  },
-  editButtonText: { color: '#1a73e8', fontWeight: '600', fontSize: 13 },
-  price: { fontSize: 20, fontWeight: '600', color: '#1a73e8', marginTop: 4 },
-  status: { color: '#666', marginTop: 4, marginBottom: 16 },
-  section: { marginBottom: 20 },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#555',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-  },
-  commissionTitle: { marginTop: 12 },
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  detailLabel: { color: '#888' },
-  detailValue: { fontWeight: '500' },
-  description: { color: '#333', marginTop: 4 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: '#f0f0f0' },
-  chipText: { color: '#333', fontSize: 13 },
-  ownerBlock: { marginBottom: 8 },
-  hint: { color: '#888', fontSize: 12, marginTop: 4 },
-  publicationSection: {
-    backgroundColor: '#f7f9fc',
-    padding: 12,
-    borderRadius: 10,
-  },
-  warningText: { color: '#a15c00', fontSize: 13, marginBottom: 4 },
-  secondaryButton: {
-    alignSelf: 'flex-start',
-    marginTop: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#eef4ff',
-  },
-  secondaryButtonText: { color: '#1a73e8', fontWeight: '600' },
-  archiveButton: {
-    borderWidth: 1,
-    borderColor: '#c0392b',
-    borderRadius: 8,
-    padding: 14,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  archiveButtonText: { color: '#c0392b', fontWeight: '600' },
-  restoreButton: {
-    backgroundColor: '#1a73e8',
-    borderRadius: 8,
-    padding: 14,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  restoreButtonText: { color: '#fff', fontWeight: '600' },
-  archivedBanner: {
-    backgroundColor: '#fdf1e7',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 12,
-  },
-  archivedBannerText: { color: '#a15c00', fontSize: 13 },
-  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
-  photoThumb: { width: 72, height: 72, borderRadius: 8, backgroundColor: '#eee' },
-  editLocationButton: {
-    alignSelf: 'flex-start',
-    marginTop: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#eef4ff',
-  },
-  editLocationButtonText: { color: '#1a73e8', fontWeight: '600' },
+  photoCountText: { color: colors.text.inverse, fontSize: 12, fontWeight: '600' },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm },
+  titleText: { flexShrink: 1 },
+  editIcon: { fontSize: 16, color: colors.brand.primaryNavy },
+  badgeRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.md },
+  archivedBanner: { backgroundColor: colors.status.pending.bg, marginBottom: spacing.md },
+  archivedBannerText: { color: colors.status.pending.fg, fontSize: 13 },
+  publicationCard: { marginBottom: spacing.lg },
+  hint: { color: colors.text.secondary, fontSize: 12, marginTop: spacing.xs },
+  warningText: { color: colors.status.pending.fg, fontSize: 13, marginTop: spacing.xs },
+  pubButton: { alignSelf: 'flex-start', marginTop: spacing.sm },
+  pubButtonRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  tabsRow: { flexDirection: 'row', marginBottom: spacing.md },
+  tabCard: { marginBottom: spacing.lg },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.xs },
+  detailValue: { fontWeight: '600' },
+  description: { marginTop: spacing.sm },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  featureChip: { paddingHorizontal: spacing.smd, paddingVertical: 6, borderRadius: radii.pill, backgroundColor: colors.background },
+  featureChipText: { color: colors.text.primary, fontSize: 13 },
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  photoThumb: { width: 84, height: 84, borderRadius: radii.control, backgroundColor: colors.border },
+  lockNotice: { color: colors.text.secondary, fontSize: 12, marginBottom: spacing.sm },
+  privateBlock: { marginBottom: spacing.md },
+  ownerBlock: { marginBottom: spacing.sm, marginTop: spacing.xs },
+  commissionTitle: { marginTop: spacing.smd },
+  bottomAction: { marginTop: spacing.sm },
   savingOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: colors.overlay,
     alignItems: 'center',
     justifyContent: 'center',
   },

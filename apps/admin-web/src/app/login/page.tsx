@@ -28,10 +28,18 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex flex-1 items-center justify-center p-6">
-      <form onSubmit={onSubmit} className="w-full max-w-sm space-y-4 rounded-lg border p-6">
-        <h1 className="text-xl font-semibold">Admin Sign In</h1>
-        <p className="text-sm text-gray-500">
+    <div className="flex flex-1 items-center justify-center bg-[var(--color-app-bg)] p-6">
+      <form
+        onSubmit={onSubmit}
+        className="w-full max-w-sm space-y-4 rounded-xl border border-border bg-surface p-8 shadow-sm"
+      >
+        <div className="mb-2 flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-deep-navy text-sm font-bold text-white">
+            PB
+          </div>
+          <h1 className="text-lg font-semibold text-deep-navy">Admin Sign In</h1>
+        </div>
+        <p className="text-sm text-text-secondary">
           Platform moderation only — this account must hold an admin platform role (admin.content.*
           permissions).
         </p>
@@ -41,7 +49,7 @@ export default function LoginPage() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="w-full rounded border px-3 py-2"
+          className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-navy focus:outline-none"
         />
         <input
           type="password"
@@ -49,13 +57,13 @@ export default function LoginPage() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          className="w-full rounded border px-3 py-2"
+          className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-navy focus:outline-none"
         />
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-[var(--color-status-sold-fg)]">{error}</p>}
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded bg-blue-600 px-3 py-2 font-medium text-white disabled:opacity-50"
+          className="w-full rounded-lg bg-navy px-3 py-2.5 font-medium text-white transition hover:opacity-90 disabled:opacity-50"
         >
           {submitting ? 'Signing in…' : 'Sign In'}
         </button>

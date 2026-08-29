@@ -296,6 +296,66 @@ endpoint (Milestone 6)" / "Mobile role-aware navigation & UX (Milestone
 6)" and docs/PERMISSIONS.md "Public professional contact (Milestone 6)"
 for the full technical detail.
 
+### ProBase final design system & UI/UX polish (Milestone 7)
+
+Also not a feature milestone — every mobile screen and the admin-web
+console were restyled onto one locked design system (navy/gold/white,
+consistent typography/spacing/radii, a real component library) without
+changing any V1 business logic, matching engine, or authorization
+boundary. See `docs/DESIGN_SYSTEM.md` for the complete design-token
+reference, component catalog, navigation structure, the Add Property
+5-step workflow, and publication UX — this section covers only the
+product-level summary and what remains device-only.
+
+- **Two small, additive backend changes** made the redesigned Properties
+  list possible without a client-side N+1: `PropertyListItem` gained a
+  `publicationStatus: PropertyPublicationStatus | null` field (via a
+  `publication: { select: { status: true } }` join already available on
+  the existing list/detail queries), and `ListPropertiesQueryDto` gained
+  an optional `publicationFilter: 'PRIVATE' | 'PENDING_REVIEW' |
+  'PUBLISHED'` query param, powering the redesigned Properties screen's
+  primary filter chips (All / Private / Published / Pending). Neither
+  changes any authorization rule — both are covered by
+  `apps/api/test/property-search.e2e-spec.ts`.
+- **No V1 capability was removed or made unreachable.** Every screen was
+  restyled in place (or, for Add Property, restructured into the
+  spec'd 5-step wizard) while preserving every existing action; see
+  `docs/DESIGN_SYSTEM.md`'s "Known limitations" for the one accepted,
+  intentional UX trade-off (no per-item list thumbnails).
+
+#### Real-device testing checklist
+
+The following can only be meaningfully verified on a real device or
+simulator with camera/location/notification hardware and OS-level
+permission prompts — this sandbox has no such device, so none of these
+have been interactively exercised, only reviewed at the source level:
+
+- `expo-image-picker` photo multi-selection, the native permission
+  prompt, and actual camera/photo-library access (Add Property Step 4,
+  Property Detail's photo gallery).
+- Upload progress and retry behavior for a real (non-trivial) image file
+  over a real network connection.
+- Google Maps interaction (`MapLocationPicker`): pan/zoom gestures, pin
+  drag, and the native place-search autocomplete UX.
+- The "use current location" permission prompt and real GPS behavior.
+- Registration email/phone verification UX exactly as a user would
+  experience it (this milestone's automated smoke test instead read
+  tokens/OTPs directly from the dev console-mail/console-SMS provider
+  log, which is the correct dev-only mechanism but is not the same as a
+  user reading a real email/SMS on a phone).
+- On-device keyboard behavior (the `AppScreen`-level
+  `KeyboardAvoidingView` fix and safe-area handling were verified by
+  source review and automated tests only — never on an actual notch/
+  home-indicator device).
+- `tel:` / `mailto:` / `wa.me` deep links actually opening the phone,
+  mail, or WhatsApp app (verified only that the correct URLs are
+  constructed and `Linking.openURL` is called with them).
+- Visual rendering at multiple real device sizes/densities and both
+  light/dark OS themes — this milestone's screen review was source-level
+  plus automated test coverage (including the admin-web Playwright
+  suite, which does render real pages in a real headless browser), not
+  interactive visual QA across physical devices.
+
 ## Build order
 
 The platform is built milestone by milestone; see the root

@@ -1,15 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../auth/AuthContext';
 import { getMediaAccessUrl, getProperty } from '../../api/properties';
@@ -17,6 +7,8 @@ import { getPublication, savePublicationDraft, submitPublication } from '../../a
 import { ApiError } from '../../api/client';
 import type { PropertyDetail, PropertyLocationVisibility } from '../../api/types';
 import type { PropertiesStackParamList } from '../../navigation/PropertiesStack';
+import { AppScreen, Button, Card, ErrorState, FilterChip, LoadingState, TextField } from '../../components/ui';
+import { colors, priceText, radii, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<PropertiesStackParamList, 'PublishProperty'>;
 
@@ -27,15 +19,6 @@ const VISIBILITY_OPTIONS: { value: PropertyLocationVisibility; label: string }[]
   { value: 'PUBLIC_EXACT', label: 'Exact Pin' },
 ];
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {children}
-    </View>
-  );
-}
-
 interface ImageOption {
   id: string;
   filename: string;
@@ -43,13 +26,13 @@ interface ImageOption {
 }
 
 /**
- * A single scrollable form, matching the established simplification for
- * property forms on mobile (see AddPropertyScreen) — every field the
- * spec's "Prepare Public Listing" step list calls for is present, without
- * a literal paginated wizard. `propertyType`/`listingPurpose` are shown
- * read-only (mirrored from the actual property) rather than editable —
- * a listing should never claim to be a different type of property than
- * it actually is.
+ * "Prepare for Publication" (Milestone 7 spec §18) — a single scrollable
+ * form, matching the established simplification for property forms on
+ * mobile (see AddPropertyScreen). Only publication-related decisions the
+ * backend already supports appear here; private fields (owner, private
+ * notes, commission) never become publication fields — this screen has
+ * no code path that can even read them. `propertyType`/`listingPurpose`
+ * are shown read-only, mirrored from the actual property.
  */
 export function PublishPropertyScreen({ route, navigation }: Props): React.JSX.Element {
   const { propertyId } = route.params;
@@ -69,8 +52,7 @@ export function PublishPropertyScreen({ route, navigation }: Props): React.JSX.E
   const [bathrooms, setBathrooms] = useState('');
   const [areaSqm, setAreaSqm] = useState('');
   const [featureKeys, setFeatureKeys] = useState<Set<string>>(new Set());
-  const [locationVisibility, setLocationVisibility] =
-    useState<PropertyLocationVisibility>('PRIVATE');
+  const [locationVisibility, setLocationVisibility] = useState<PropertyLocationVisibility>('PRIVATE');
   const [publicCity, setPublicCity] = useState('');
   const [publicArea, setPublicArea] = useState('');
   const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
@@ -188,10 +170,7 @@ export function PublishPropertyScreen({ route, navigation }: Props): React.JSX.E
       await savePublicationDraft(currentWorkspace.id, propertyId, buildDraftInput());
       navigation.goBack();
     } catch (err) {
-      Alert.alert(
-        'Could not save draft',
-        err instanceof ApiError ? err.message : 'Please try again.',
-      );
+      Alert.alert('Could not save draft', err instanceof ApiError ? err.message : 'Please try again.');
     } finally {
       setSaving(false);
     }
@@ -216,255 +195,152 @@ export function PublishPropertyScreen({ route, navigation }: Props): React.JSX.E
     }
   };
 
-  if (loading) {
-    return <ActivityIndicator style={styles.center} />;
-  }
-  if (error || !property) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.error}>{error ?? 'Property not found.'}</Text>
-      </View>
-    );
-  }
+  if (loading) return <LoadingState />;
+  if (error || !property) return <ErrorState message={error ?? 'Property not found.'} onRetry={() => void load()} />;
+
+  const mainImageUrl = images.find((i) => i.id === mainMediaId)?.url ?? null;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.hint}>
+    <AppScreen>
+      <Text style={[typography.bodySmall, styles.disclaimer]}>
         Owner contact info, private notes, commission, and internal reference numbers are never
         published — only what you fill in below is ever shown to clients.
       </Text>
 
-      <Section title="Public Title & Description">
-        <TextInput
-          style={styles.input}
-          placeholder="Public title"
-          value={publicTitle}
-          onChangeText={setPublicTitle}
-        />
-        <TextInput
-          style={[styles.input, styles.multiline]}
-          placeholder="Public description"
-          value={publicDescription}
-          onChangeText={setPublicDescription}
-          multiline
-        />
-      </Section>
-
-      <Section title="Price">
-        <View style={styles.row}>
-          <TextInput
-            style={[styles.input, styles.flex1]}
-            placeholder="Price"
-            keyboardType="numeric"
-            value={publicPrice}
-            onChangeText={setPublicPrice}
-          />
-          <TextInput
-            style={[styles.input, styles.currencyInput]}
-            placeholder="USD"
-            autoCapitalize="characters"
-            maxLength={3}
-            value={currency}
-            onChangeText={setCurrency}
-          />
+      <Text style={typography.label}>Preview</Text>
+      <Card style={styles.previewCard}>
+        <View style={styles.previewRow}>
+          {mainImageUrl ? (
+            <Image source={{ uri: mainImageUrl }} style={styles.previewImage} />
+          ) : (
+            <View style={[styles.previewImage, styles.previewImagePlaceholder]} />
+          )}
+          <View style={styles.previewText}>
+            <Text style={typography.h3} numberOfLines={1}>
+              {publicTitle || 'Untitled listing'}
+            </Text>
+            <Text style={priceText}>
+              {currency} {publicPrice || '0'}
+            </Text>
+            <Text style={typography.caption}>{[publicArea, publicCity].filter(Boolean).join(', ') || 'No public location'}</Text>
+          </View>
         </View>
-      </Section>
+      </Card>
 
-      <Section title="Details">
-        <View style={styles.row}>
-          <TextInput
-            style={[styles.input, styles.flex1]}
-            placeholder="Bedrooms"
-            keyboardType="numeric"
-            value={bedrooms}
-            onChangeText={setBedrooms}
-          />
-          <TextInput
-            style={[styles.input, styles.flex1]}
-            placeholder="Bathrooms"
-            keyboardType="numeric"
-            value={bathrooms}
-            onChangeText={setBathrooms}
-          />
-          <TextInput
-            style={[styles.input, styles.flex1]}
-            placeholder="Area (sqm)"
-            keyboardType="numeric"
-            value={areaSqm}
-            onChangeText={setAreaSqm}
-          />
+      <Text style={typography.label}>Public Title & Description</Text>
+      <TextField label="Title" value={publicTitle} onChangeText={setPublicTitle} />
+      <TextField label="Description" value={publicDescription} onChangeText={setPublicDescription} multiline optional />
+
+      <View style={styles.row}>
+        <View style={styles.flex1}>
+          <TextField label="Price" value={publicPrice} onChangeText={setPublicPrice} keyboardType="numeric" />
         </View>
-        <Text style={styles.hint}>
-          {property.propertyType} · {property.listingPurpose}
-        </Text>
-      </Section>
-
-      <Section title="Public Features">
-        <View style={styles.chipRow}>
-          {property.features
-            .filter((f) => f.value)
-            .map((f) => (
-              <TouchableOpacity
-                key={f.featureKey}
-                style={[styles.chip, featureKeys.has(f.featureKey) && styles.chipActive]}
-                onPress={() => toggleFeature(f.featureKey)}
-              >
-                <Text
-                  style={[styles.chipText, featureKeys.has(f.featureKey) && styles.chipTextActive]}
-                >
-                  {f.featureKey}
-                </Text>
-              </TouchableOpacity>
-            ))}
+        <View style={styles.currencyField}>
+          <TextField label="Currency" value={currency} onChangeText={setCurrency} autoCapitalize="characters" maxLength={3} />
         </View>
-      </Section>
+      </View>
 
-      <Section title="Public Location">
-        <View style={styles.chipRow}>
-          {VISIBILITY_OPTIONS.map((option) => (
-            <TouchableOpacity
-              key={option.value}
-              style={[styles.chip, locationVisibility === option.value && styles.chipActive]}
-              onPress={() => setLocationVisibility(option.value)}
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  locationVisibility === option.value && styles.chipTextActive,
-                ]}
-              >
-                {option.label}
-              </Text>
-            </TouchableOpacity>
+      <View style={styles.row}>
+        <View style={styles.flex1}>
+          <TextField label="Bedrooms" value={bedrooms} onChangeText={setBedrooms} keyboardType="numeric" optional />
+        </View>
+        <View style={styles.flex1}>
+          <TextField label="Bathrooms" value={bathrooms} onChangeText={setBathrooms} keyboardType="numeric" optional />
+        </View>
+        <View style={styles.flex1}>
+          <TextField label="Area (m²)" value={areaSqm} onChangeText={setAreaSqm} keyboardType="numeric" optional />
+        </View>
+      </View>
+      <Text style={[typography.bodySmall, styles.typeHint]}>
+        {property.propertyType} · {property.listingPurpose}
+      </Text>
+
+      <Text style={typography.label}>Public Features</Text>
+      <View style={styles.chipRow}>
+        {property.features
+          .filter((f) => f.value)
+          .map((f) => (
+            <FilterChip key={f.featureKey} label={f.featureKey.replaceAll('_', ' ')} selected={featureKeys.has(f.featureKey)} onPress={() => toggleFeature(f.featureKey)} />
           ))}
+      </View>
+
+      <Text style={typography.label}>Public Location</Text>
+      <View style={styles.chipRow}>
+        {VISIBILITY_OPTIONS.map((option) => (
+          <FilterChip key={option.value} label={option.label} selected={locationVisibility === option.value} onPress={() => setLocationVisibility(option.value)} />
+        ))}
+      </View>
+      {(locationVisibility === 'PUBLIC_APPROXIMATE' || locationVisibility === 'PUBLIC_EXACT') && (
+        <View style={styles.row}>
+          <View style={styles.flex1}>
+            <TextField label="City" value={publicCity} onChangeText={setPublicCity} />
+          </View>
+          <View style={styles.flex1}>
+            <TextField label="Area" value={publicArea} onChangeText={setPublicArea} />
+          </View>
         </View>
-        {(locationVisibility === 'PUBLIC_APPROXIMATE' || locationVisibility === 'PUBLIC_EXACT') && (
-          <View style={styles.row}>
-            <TextInput
-              style={[styles.input, styles.flex1]}
-              placeholder="City"
-              value={publicCity}
-              onChangeText={setPublicCity}
-            />
-            <TextInput
-              style={[styles.input, styles.flex1]}
-              placeholder="Area"
-              value={publicArea}
-              onChangeText={setPublicArea}
-            />
-          </View>
-        )}
-        {locationVisibility === 'PUBLIC_EXACT' && !property.location && (
-          <Text style={styles.warningText}>
-            This property has no saved location — set one before choosing an exact pin.
-          </Text>
-        )}
-      </Section>
+      )}
+      {locationVisibility === 'PUBLIC_EXACT' && !property.location && (
+        <Text style={styles.warningText}>This property has no saved location — set one before choosing an exact pin.</Text>
+      )}
 
-      <Section title="Public Photos">
-        {images.length === 0 ? (
-          <Text style={styles.hint}>Upload at least one photo on the property first.</Text>
-        ) : (
-          <View style={styles.imageRow}>
-            {images.map((image) => {
-              const selected = selectedMediaIds.includes(image.id);
-              return (
-                <TouchableOpacity
-                  key={image.id}
-                  style={[styles.imageOption, selected && styles.imageOptionSelected]}
-                  onPress={() => toggleImage(image.id)}
-                >
-                  {image.url ? (
-                    <Image source={{ uri: image.url }} style={styles.imageThumb} />
-                  ) : (
-                    <View style={[styles.imageThumb, styles.imagePlaceholder]} />
-                  )}
-                  {selected && mainMediaId === image.id && (
-                    <Text style={styles.mainBadge}>Main</Text>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-      </Section>
+      <Text style={typography.label}>Public Photos</Text>
+      {images.length === 0 ? (
+        <Text style={[typography.bodySmall, styles.spacedBelow]}>Upload at least one photo on the property first.</Text>
+      ) : (
+        <View style={styles.imageRow}>
+          {images.map((image) => {
+            const selected = selectedMediaIds.includes(image.id);
+            return (
+              <TouchableOpacity key={image.id} style={[styles.imageOption, selected && styles.imageOptionSelected]} onPress={() => toggleImage(image.id)}>
+                {image.url ? (
+                  <Image source={{ uri: image.url }} style={styles.imageThumb} />
+                ) : (
+                  <View style={[styles.imageThumb, styles.previewImagePlaceholder]} />
+                )}
+                {selected && mainMediaId === image.id ? (
+                  <View style={styles.mainBadge}>
+                    <Text style={styles.mainBadgeText}>Main</Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
 
-      <TouchableOpacity style={styles.secondaryButton} onPress={onSaveDraft} disabled={saving}>
-        <Text style={styles.secondaryButtonText}>Save Draft</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.primaryButton} onPress={onSubmitForReview} disabled={saving}>
-        <Text style={styles.primaryButtonText}>{saving ? 'Submitting…' : 'Submit for Review'}</Text>
-      </TouchableOpacity>
-    </ScrollView>
+      <Button label="Save Draft" variant="secondary" onPress={() => void onSaveDraft()} disabled={saving} style={styles.actionButton} />
+      <Button label="Submit for Review" onPress={() => void onSubmitForReview()} loading={saving} style={styles.actionButton} />
+    </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  content: { padding: 16, paddingBottom: 48 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  error: { color: '#c0392b' },
-  section: { marginBottom: 20 },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#555',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-  },
-  hint: { color: '#888', fontSize: 12, marginBottom: 8 },
-  warningText: { color: '#a15c00', fontSize: 12, marginTop: 4 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8,
-  },
-  multiline: { minHeight: 80, textAlignVertical: 'top' },
-  row: { flexDirection: 'row', gap: 8 },
+  disclaimer: { marginBottom: spacing.md },
+  previewCard: { marginBottom: spacing.lg },
+  previewRow: { flexDirection: 'row', gap: spacing.smd },
+  previewImage: { width: 72, height: 72, borderRadius: radii.control, backgroundColor: colors.border },
+  previewImagePlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  previewText: { flex: 1, justifyContent: 'center', gap: 2 },
+  row: { flexDirection: 'row', gap: spacing.sm },
   flex1: { flex: 1 },
-  currencyInput: { width: 80 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: '#f0f0f0' },
-  chipActive: { backgroundColor: '#1a73e8' },
-  chipText: { color: '#333', fontSize: 13 },
-  chipTextActive: { color: '#fff' },
-  imageRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  imageOption: {
-    borderWidth: 2,
-    borderColor: 'transparent',
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  imageOptionSelected: { borderColor: '#1a73e8' },
-  imageThumb: { width: 72, height: 72, backgroundColor: '#eee' },
-  imagePlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  currencyField: { width: 96 },
+  typeHint: { marginBottom: spacing.md },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: spacing.md },
+  warningText: { color: colors.status.pending.fg, fontSize: 12, marginTop: spacing.xs, marginBottom: spacing.sm },
+  spacedBelow: { marginBottom: spacing.md },
+  imageRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
+  imageOption: { borderWidth: 2, borderColor: 'transparent', borderRadius: radii.control, overflow: 'hidden' },
+  imageOptionSelected: { borderColor: colors.brand.primaryNavy },
+  imageThumb: { width: 72, height: 72, backgroundColor: colors.border },
   mainBadge: {
     position: 'absolute',
     bottom: 2,
     left: 2,
-    backgroundColor: '#1a73e8',
-    color: '#fff',
-    fontSize: 9,
-    paddingHorizontal: 4,
+    backgroundColor: colors.brand.gold,
     borderRadius: 4,
+    paddingHorizontal: 4,
   },
-  secondaryButton: {
-    borderWidth: 1,
-    borderColor: '#1a73e8',
-    borderRadius: 8,
-    padding: 14,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  secondaryButtonText: { color: '#1a73e8', fontWeight: '600' },
-  primaryButton: {
-    backgroundColor: '#1a73e8',
-    borderRadius: 8,
-    padding: 14,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  primaryButtonText: { color: '#fff', fontWeight: '700' },
+  mainBadgeText: { color: colors.text.onGold, fontSize: 9, fontWeight: '700' },
+  actionButton: { marginTop: spacing.sm },
 });

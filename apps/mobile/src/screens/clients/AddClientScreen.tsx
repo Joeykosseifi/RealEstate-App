@@ -1,42 +1,17 @@
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../auth/AuthContext';
 import { createClient } from '../../api/clients';
 import { ApiError } from '../../api/client';
 import type { ClientsStackParamList } from '../../navigation/ClientsStack';
+import { AppScreen, Button, FilterChip, TextField } from '../../components/ui';
+import { colors, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<ClientsStackParamList, 'AddClient'>;
 
-const SOURCES = [
-  'REFERRAL',
-  'WHATSAPP',
-  'INSTAGRAM',
-  'FACEBOOK',
-  'WEBSITE',
-  'PHONE',
-  'WALK_IN',
-  'PROPERTY_INQUIRY',
-  'OTHER',
-];
+const SOURCES = ['REFERRAL', 'WHATSAPP', 'INSTAGRAM', 'FACEBOOK', 'WEBSITE', 'PHONE', 'WALK_IN', 'PROPERTY_INQUIRY', 'OTHER'];
 const CONTACT_METHODS = ['PHONE', 'WHATSAPP', 'EMAIL', 'OTHER'];
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {children}
-    </View>
-  );
-}
 
 function ChipPicker({
   options,
@@ -48,15 +23,9 @@ function ChipPicker({
   onChange: (value: string | undefined) => void;
 }) {
   return (
-    <View style={styles.chipRow}>
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: spacing.md }}>
       {options.map((option) => (
-        <TouchableOpacity
-          key={option}
-          style={[styles.chip, value === option && styles.chipActive]}
-          onPress={() => onChange(value === option ? undefined : option)}
-        >
-          <Text style={[styles.chipText, value === option && styles.chipTextActive]}>{option}</Text>
-        </TouchableOpacity>
+        <FilterChip key={option} label={option} selected={value === option} onPress={() => onChange(value === option ? undefined : option)} />
       ))}
     </View>
   );
@@ -78,9 +47,7 @@ export function AddClientScreen({ navigation }: Props): React.JSX.Element {
   const [whatsappPhone, setWhatsappPhone] = useState('');
   const [email, setEmail] = useState('');
   const [source, setSource] = useState<string | undefined>(undefined);
-  const [preferredContactMethod, setPreferredContactMethod] = useState<string | undefined>(
-    undefined,
-  );
+  const [preferredContactMethod, setPreferredContactMethod] = useState<string | undefined>(undefined);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,118 +81,24 @@ export function AddClientScreen({ navigation }: Props): React.JSX.Element {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Section title="Name">
-        <TextInput
-          style={styles.input}
-          placeholder="First name"
-          value={firstName}
-          onChangeText={setFirstName}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Last name"
-          value={lastName}
-          onChangeText={setLastName}
-        />
-      </Section>
+    <AppScreen>
+      <TextField label="First name" value={firstName} onChangeText={setFirstName} />
+      <TextField label="Last name" value={lastName} onChangeText={setLastName} />
+      <TextField label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
 
-      <Section title="Phone">
-        <TextInput
-          style={styles.input}
-          placeholder="Phone"
-          keyboardType="phone-pad"
-          value={phone}
-          onChangeText={setPhone}
-        />
-      </Section>
+      <Text style={typography.label}>How did they find you?</Text>
+      <ChipPicker options={SOURCES} value={source} onChange={setSource} />
 
-      <Section title="How did they find you?">
-        <ChipPicker options={SOURCES} value={source} onChange={setSource} />
-      </Section>
+      <Text style={[typography.label, { marginBottom: spacing.sm }]}>More details</Text>
+      <TextField label="WhatsApp" value={whatsappPhone} onChangeText={setWhatsappPhone} keyboardType="phone-pad" optional />
+      <TextField label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" optional />
+      <Text style={typography.label}>Preferred contact method</Text>
+      <ChipPicker options={CONTACT_METHODS} value={preferredContactMethod} onChange={setPreferredContactMethod} />
+      <TextField label="Notes" value={notes} onChangeText={setNotes} multiline optional />
 
-      <Section title="More details">
-        <TextInput
-          style={styles.input}
-          placeholder="WhatsApp (if different)"
-          keyboardType="phone-pad"
-          value={whatsappPhone}
-          onChangeText={setWhatsappPhone}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <Text style={styles.label}>Preferred contact method</Text>
-        <ChipPicker
-          options={CONTACT_METHODS}
-          value={preferredContactMethod}
-          onChange={setPreferredContactMethod}
-        />
-        <TextInput
-          style={[styles.input, styles.multiline]}
-          placeholder="Notes"
-          value={notes}
-          onChangeText={setNotes}
-          multiline
-        />
-      </Section>
+      {error ? <Text style={{ color: colors.danger, marginBottom: spacing.sm, textAlign: 'center' }}>{error}</Text> : null}
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <TouchableOpacity
-        style={[styles.submitButton, submitting && styles.buttonDisabled]}
-        onPress={() => void onSubmit()}
-        disabled={submitting}
-      >
-        {submitting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.submitButtonText}>Save Client</Text>
-        )}
-      </TouchableOpacity>
-    </ScrollView>
+      <Button label="Save Client" onPress={() => void onSubmit()} loading={submitting} style={{ marginTop: spacing.sm }} />
+    </AppScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  content: { padding: 16, paddingBottom: 48 },
-  section: { marginBottom: 20 },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#555',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-  },
-  label: { fontSize: 13, color: '#666', marginBottom: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#d0d0d0',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    fontSize: 16,
-  },
-  multiline: { minHeight: 80, textAlignVertical: 'top' },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
-  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: '#f0f0f0' },
-  chipActive: { backgroundColor: '#1a73e8' },
-  chipText: { color: '#333', fontSize: 13 },
-  chipTextActive: { color: '#fff' },
-  submitButton: {
-    backgroundColor: '#1a73e8',
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  submitButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  error: { color: '#c0392b', marginBottom: 12, textAlign: 'center' },
-});

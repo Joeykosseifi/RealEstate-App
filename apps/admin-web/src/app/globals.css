@@ -1,26 +1,51 @@
 @import "tailwindcss";
 
+/**
+ * ProBase visual identity (Milestone 7) — same LOCKED palette as mobile
+ * (see apps/mobile/src/theme/colors.ts and docs/DESIGN_SYSTEM.md).
+ * Admin stays a desktop-oriented tool: this only changes color/type,
+ * never the table/panel-based layout.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --color-deep-navy: #0f1f33;
+  --color-navy: #163a5f;
+  --color-gold: #c9942f;
+  --color-app-bg: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-text: #17212b;
+  --color-text-secondary: #667085;
+  --color-border: #e4e7ec;
+
+  --color-status-available-fg: #0f7b4e;
+  --color-status-available-bg: #e4f6ec;
+  --color-status-pending-fg: #b25e09;
+  --color-status-pending-bg: #fcedd8;
+  --color-status-sold-fg: #b42318;
+  --color-status-sold-bg: #fbe7e6;
+  --color-status-rented-fg: #1d5fbf;
+  --color-status-rented-bg: #e4eefc;
+  --color-status-archived-fg: #667085;
+  --color-status-archived-bg: #eef0f2;
+
+  --background: var(--color-app-bg);
+  --foreground: var(--color-text);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-deep-navy: var(--color-deep-navy);
+  --color-navy: var(--color-navy);
+  --color-gold: var(--color-gold);
+  --color-surface: var(--color-surface);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-border: var(--color-border);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), -apple-system, "Segoe UI", Arial, sans-serif;
 }

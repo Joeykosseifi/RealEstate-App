@@ -122,18 +122,29 @@ real login/registration rate limiters, never a weakened stand-in).
 
 ### Known real-device-only verification gaps
 
-Two pieces of mobile UI are verified against the real backend (curl-level
-smoke tests, or the package's own type definitions) but not by actually
-tapping through them on a physical device or simulator, since this
-sandbox has neither:
+Mobile UI in these areas is verified against the real backend (HTTP-level
+smoke tests, TypeScript's own type-checking, or Jest unit tests) but not
+by actually tapping through it on a physical device or simulator, since
+this sandbox has neither:
 
-- `PropertyDetailScreen`'s photo upload (`expo-image-picker`, Milestone
-  6) — the picker's own permission prompt and camera-roll UI.
+- `PropertyDetailScreen`'s photo upload and the Add Property wizard's
+  Step 4 photo picker (`expo-image-picker`, Milestones 6-7) — the
+  picker's own permission prompt and camera-roll UI.
 - The mobile registration/verification screens' paste-the-token flow
   (Milestone 6.1) — keyboard behavior, autofill, and copy-paste from the
   device's mail/SMS apps into the token/OTP fields.
+- `MapLocationPicker`'s pan/zoom/pin-drag gestures and the "use current
+  location" permission prompt (Milestone 7 design pass restyled its
+  buttons/spacing only — the underlying Google Maps interaction was
+  already device-only per Milestone 3).
+- `tel:`/`mailto:`/`wa.me` deep links actually opening the phone/mail/
+  WhatsApp app, and on-device keyboard-avoidance/safe-area behavior
+  (Milestone 7) — see `docs/PRODUCT.md` "Real-device testing checklist"
+  for the complete list.
 
-Add both to the pre-launch device/beta testing checklist before shipping.
+Add all of the above to the pre-launch device/beta testing checklist
+before shipping. See `docs/DESIGN_SYSTEM.md` for the Milestone 7 design
+system itself (tokens, components, navigation, Add Property workflow).
 
 ## Build order (milestones)
 
@@ -150,7 +161,7 @@ linted, security-reviewed, and documented before the next begins.
 | 5 | Publication workflow, admin moderation & client marketplace (search, favorites) | ✅ |
 | 6 | Core product completion & UX (role-aware navigation, real dashboard, contact-professional, workflow/UX polish) | ✅ |
 | 6.1 | Mobile registration & onboarding closure (Welcome/Sign In/Create Account, real verification, forgot password) | ✅ |
-| 7 | Design system & full UI polish | ⬜ |
+| 7 | Design system & full UI polish | ✅ |
 | 8 | Conversations, messages, viewings, notifications | ⬜ |
 | 9 | Company workspace, employee accounts, team management | ⬜ |
 | 10 | Freelance/company collaboration & commission agreements | ⬜ |

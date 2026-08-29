@@ -241,6 +241,16 @@ queries (`contains`/`gte`/`lte`/relation `some`) — no raw SQL. Simple
 indexed filtering, not Postgres full-text/trigram search — acceptable
 for this milestone, see docs/DATABASE.md.
 
+`publicationFilter` (`'PRIVATE' | 'PENDING_REVIEW' | 'PUBLISHED'`, added
+Milestone 7) narrows by the property's *publication* status, independent
+of `propertyStatus` (its business status) — this is what powers the
+redesigned mobile Properties list's primary filter chips (All / Private
+/ Published / Pending). Every list item's response also carries
+`publicationStatus: PropertyPublicationStatus | null` (via a
+`publication: { select: { status: true } }` join on the existing
+list/detail query), so the mobile Properties list can render a real
+publication badge without an extra per-item request.
+
 ### Property media endpoints (Milestone 3)
 
 All nested under `workspaces/:id/properties/:propertyId/media`, all

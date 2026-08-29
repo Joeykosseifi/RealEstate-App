@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useNavigation, type NavigationProp } from '@react-navigation/native';
 import { searchMarketplace } from '../../api/marketplace';
 import type { PublicPropertyListItem } from '../../api/types';
 import type { HomeStackParamList } from '../../navigation/client/HomeStack';
+import type { ClientTabParamList } from '../../navigation/client/ClientTabs';
 import { ListingCard } from './ListingCard';
+import { ErrorState, SearchInput, SkeletonList } from '../../components/ui';
+import { colors, radii, screenPadding, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'MarketplaceHome'>;
 
@@ -23,7 +27,10 @@ function ListingRail({
     <View style={styles.railSection}>
       <Text style={styles.railTitle}>{title}</Text>
       {loading ? (
-        <ActivityIndicator style={styles.railLoading} />
+        <View style={styles.railSkeletonRow}>
+          <View style={styles.railSkeletonCard} />
+          <View style={styles.railSkeletonCard} />
+        </View>
       ) : items.length === 0 ? (
         <Text style={styles.emptyText}>Nothing here yet.</Text>
       ) : (
@@ -34,11 +41,7 @@ function ListingRail({
           keyExtractor={(item) => item.publicationId}
           contentContainerStyle={styles.railContent}
           renderItem={({ item }) => (
-            <ListingCard
-              listing={item}
-              onPress={() => onPressListing(item.publicationId)}
-              style={styles.railCard}
-            />
+            <ListingCard listing={item} onPress={() => onPressListing(item.publicationId)} style={styles.railCard} />
           )}
         />
       )}
@@ -47,11 +50,13 @@ function ListingRail({
 }
 
 /**
- * The client Home experience — replaces the Milestone 3 placeholder now
- * that the marketplace has real listings. Deterministic sections only
- * (newest, for sale, for rent) — no recommendation AI, per spec.
+ * The client Home experience (Milestone 7 spec §20) — "Find your perfect
+ * property," prominent search, Buy/Rent shortcuts, and deterministic
+ * sections only (newest, for sale, for rent) — no recommendation AI.
+ * Source of truth remains approved publication snapshots exclusively.
  */
 export function MarketplaceHomeScreen({ navigation }: Props): React.JSX.Element {
+  const tabNavigation = useNavigation<NavigationProp<ClientTabParamList>>();
   const [newest, setNewest] = useState<PublicPropertyListItem[]>([]);
   const [forSale, setForSale] = useState<PublicPropertyListItem[]>([]);
   const [forRent, setForRent] = useState<PublicPropertyListItem[]>([]);
@@ -85,41 +90,40 @@ export function MarketplaceHomeScreen({ navigation }: Props): React.JSX.Element 
     return unsubscribe;
   }, [navigation, load]);
 
-  const goToDetail = (publicationId: string) =>
-    navigation.navigate('MarketplaceDetail', { publicationId });
+  const goToDetail = (publicationId: string) => navigation.navigate('MarketplaceDetail', { publicationId });
+  const goToSearch = (listingPurpose?: 'SALE' | 'RENT') =>
+    tabNavigation.navigate('Search', { screen: 'MarketplaceSearch', params: { listingPurpose } });
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Marketplace</Text>
+        <Text style={typography.display}>Find your perfect property</Text>
+        <TouchableOpacity onPress={() => goToSearch()} accessibilityRole="button">
+          <View pointerEvents="none">
+            <SearchInput value="" onChangeText={() => {}} placeholder="Search by title, city, or area" />
+          </View>
+        </TouchableOpacity>
+        <View style={styles.purposeRow}>
+          <TouchableOpacity style={styles.purposeButton} onPress={() => goToSearch('SALE')}>
+            <Text style={styles.purposeButtonText}>Buy</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.purposeButton} onPress={() => goToSearch('RENT')}>
+            <Text style={styles.purposeButtonText}>Rent</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {error ? (
-        <Text style={styles.error}>{error}</Text>
+        <ErrorState message={error} onRetry={() => void load()} />
       ) : (
         <FlatList
           data={[{ key: 'sections' }]}
           keyExtractor={(item) => item.key}
           renderItem={() => (
             <>
-              <ListingRail
-                title="New Listings"
-                items={newest}
-                loading={loading}
-                onPressListing={goToDetail}
-              />
-              <ListingRail
-                title="For Sale"
-                items={forSale}
-                loading={loading}
-                onPressListing={goToDetail}
-              />
-              <ListingRail
-                title="For Rent"
-                items={forRent}
-                loading={loading}
-                onPressListing={goToDetail}
-              />
+              <ListingRail title="New Listings" items={newest} loading={loading} onPressListing={goToDetail} />
+              <ListingRail title="For Sale" items={forSale} loading={loading} onPressListing={goToDetail} />
+              <ListingRail title="For Rent" items={forRent} loading={loading} onPressListing={goToDetail} />
             </>
           )}
         />
@@ -129,19 +133,22 @@ export function MarketplaceHomeScreen({ navigation }: Props): React.JSX.Element 
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  container: { flex: 1, backgroundColor: colors.background },
+  header: { paddingHorizontal: screenPadding, paddingTop: spacing.md, paddingBottom: spacing.lg, gap: spacing.smd },
+  purposeRow: { flexDirection: 'row', gap: spacing.sm },
+  purposeButton: {
+    flex: 1,
+    backgroundColor: colors.brand.primaryNavy,
+    borderRadius: radii.button,
+    paddingVertical: spacing.smd,
     alignItems: 'center',
-    padding: 16,
   },
-  headerTitle: { fontSize: 22, fontWeight: '700' },
-  railSection: { marginBottom: 20 },
-  railTitle: { fontSize: 16, fontWeight: '600', marginHorizontal: 16, marginBottom: 10 },
-  railContent: { paddingHorizontal: 16, gap: 12 },
-  railCard: { marginRight: 12 },
-  railLoading: { marginTop: 12 },
-  emptyText: { color: '#888', marginHorizontal: 16 },
-  error: { color: '#c0392b', textAlign: 'center', marginTop: 24 },
+  purposeButtonText: { color: colors.text.inverse, fontWeight: '700' },
+  railSection: { marginBottom: spacing.xl },
+  railTitle: { ...typography.h2, marginHorizontal: screenPadding, marginBottom: spacing.smd },
+  railContent: { paddingHorizontal: screenPadding, gap: spacing.smd },
+  railCard: { marginRight: spacing.smd },
+  railSkeletonRow: { flexDirection: 'row', gap: spacing.smd, paddingHorizontal: screenPadding },
+  railSkeletonCard: { width: 230, height: 220, borderRadius: radii.cardLarge, backgroundColor: colors.border },
+  emptyText: { color: colors.text.secondary, marginHorizontal: screenPadding },
 });

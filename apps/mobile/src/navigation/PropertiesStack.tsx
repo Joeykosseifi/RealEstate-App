@@ -21,7 +21,7 @@ export function PropertiesStack(): React.JSX.Element {
       <Stack.Screen
         name="PropertiesList"
         component={PropertiesListScreen}
-        options={{ title: 'Properties' }}
+        options={{ title: 'My Properties' }}
       />
       <Stack.Screen
         name="AddProperty"

@@ -1,12 +1,17 @@
 import { apiRequest } from './client';
 import type { PaginatedResponse, PropertyDetail, PropertyListItem } from './types';
 
+export type PublicationFilter = 'PRIVATE' | 'PENDING_REVIEW' | 'PUBLISHED';
+
 export interface PropertyListFilters {
   page?: number;
   search?: string;
   propertyStatus?: string;
   propertyType?: string;
   listingPurpose?: string;
+  /** The Properties list's primary filter chips (Milestone 7) — publication lifecycle, not business status. */
+  publicationFilter?: PublicationFilter;
+  includeArchived?: boolean;
 }
 
 function toQueryString(filters: PropertyListFilters): string {
@@ -16,6 +21,8 @@ function toQueryString(filters: PropertyListFilters): string {
   if (filters.propertyStatus) params.set('propertyStatus', filters.propertyStatus);
   if (filters.propertyType) params.set('propertyType', filters.propertyType);
   if (filters.listingPurpose) params.set('listingPurpose', filters.listingPurpose);
+  if (filters.publicationFilter) params.set('publicationFilter', filters.publicationFilter);
+  if (filters.includeArchived) params.set('includeArchived', 'true');
   const query = params.toString();
   return query ? `?${query}` : '';
 }
@@ -41,6 +48,9 @@ export interface CreatePropertyInput {
   bedrooms?: number;
   bathrooms?: number;
   areaSqm?: number;
+  floor?: number;
+  totalFloors?: number;
+  yearBuilt?: number;
   featureKeys?: string[];
   location?: {
     latitude: number;

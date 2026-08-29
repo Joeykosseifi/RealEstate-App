@@ -1,15 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Linking,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, Linking, Share, Text } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../auth/AuthContext';
 import {
@@ -21,9 +11,12 @@ import {
 import { ApiError } from '../../api/client';
 import type { PropertyPresentationDetail } from '../../api/types';
 import type { ClientsStackParamList } from '../../navigation/ClientsStack';
+import { AppScreen, Button, Card, ErrorState, LoadingState, confirmDestructive } from '../../components/ui';
+import { colors, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<ClientsStackParamList, 'PresentationDetail'>;
 
+/** Presentation detail (Milestone 7 spec §27) — Generate/Regenerate PDF is the obvious primary action; behavior is unchanged from Milestone 4. */
 export function PresentationDetailScreen({ route }: Props): React.JSX.Element {
   const { presentationId } = route.params;
   const { currentWorkspace } = useAuth();
@@ -56,10 +49,7 @@ export function PresentationDetailScreen({ route }: Props): React.JSX.Element {
       await generatePresentation(currentWorkspace.id, presentationId);
       void load();
     } catch (err) {
-      Alert.alert(
-        'Could not generate',
-        err instanceof ApiError ? err.message : 'Please try again.',
-      );
+      Alert.alert('Could not generate', err instanceof ApiError ? err.message : 'Please try again.');
     } finally {
       setBusy(false);
     }
@@ -73,136 +63,56 @@ export function PresentationDetailScreen({ route }: Props): React.JSX.Element {
       if (action === 'view') {
         await Linking.openURL(url);
       } else {
-        // Native OS share sheet — the agent sends the PDF via WhatsApp/
-        // email/etc. manually. No in-app messaging is built here.
         await Share.share({ message: url, url });
       }
     } catch (err) {
-      Alert.alert(
-        'Could not open PDF',
-        err instanceof ApiError ? err.message : 'Please try again.',
-      );
+      Alert.alert('Could not open PDF', err instanceof ApiError ? err.message : 'Please try again.');
     } finally {
       setBusy(false);
     }
   };
 
-  const onArchive = () => {
-    if (!currentWorkspace) return;
-    Alert.alert('Archive presentation?', undefined, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Archive',
-        style: 'destructive',
-        onPress: async () => {
-          await archivePresentation(currentWorkspace.id, presentationId);
-          void load();
-        },
-      },
-    ]);
-  };
+  const onArchive = () =>
+    confirmDestructive('Archive presentation?', undefined, 'Archive', async () => {
+      if (!currentWorkspace) return;
+      await archivePresentation(currentWorkspace.id, presentationId);
+      void load();
+    });
 
-  if (loading) {
-    return <ActivityIndicator style={styles.center} />;
-  }
-  if (error || !presentation) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.error}>{error ?? 'Presentation not found.'}</Text>
-      </View>
-    );
-  }
+  if (loading) return <LoadingState />;
+  if (error || !presentation) return <ErrorState message={error ?? 'Presentation not found.'} onRetry={() => void load()} />;
 
   const hasArtifact = presentation.status !== 'DRAFT';
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>{presentation.title}</Text>
-      <Text style={styles.status}>
-        {presentation.status} · {presentation.itemCount} propert
-        {presentation.itemCount === 1 ? 'y' : 'ies'}
+    <AppScreen>
+      <Text style={typography.h1}>{presentation.title}</Text>
+      <Text style={[typography.bodySmall, { marginTop: spacing.xs, marginBottom: spacing.lg }]}>
+        {presentation.status} · {presentation.itemCount} propert{presentation.itemCount === 1 ? 'y' : 'ies'}
       </Text>
 
       {presentation.items.map((item) => (
-        <View key={item.id} style={styles.itemCard}>
-          <Text style={styles.itemTitle}>{item.property.title}</Text>
-          <Text style={styles.hint}>
-            {item.property.currency} {item.property.price.toLocaleString()} ·{' '}
-            {[item.property.area, item.property.city].filter(Boolean).join(', ')}
+        <Card key={item.id} style={{ marginBottom: spacing.sm }}>
+          <Text style={typography.h3}>{item.property.title}</Text>
+          <Text style={typography.bodySmall}>
+            {item.property.currency} {item.property.price.toLocaleString()} · {[item.property.area, item.property.city].filter(Boolean).join(', ')}
           </Text>
-          {item.agentNote ? <Text style={styles.note}>{item.agentNote}</Text> : null}
-        </View>
+          {item.agentNote ? <Text style={{ color: colors.brand.primaryNavy, fontSize: 13, marginTop: spacing.xs, fontStyle: 'italic' }}>{item.agentNote}</Text> : null}
+        </Card>
       ))}
 
-      <TouchableOpacity
-        style={[styles.button, styles.primaryButton]}
-        onPress={() => void onGenerate()}
-        disabled={busy}
-      >
-        {busy ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.primaryButtonText}>
-            {hasArtifact ? 'Regenerate PDF' : 'Generate PDF'}
-          </Text>
-        )}
-      </TouchableOpacity>
+      <Button label={hasArtifact ? 'Regenerate PDF' : 'Generate PDF'} onPress={() => void onGenerate()} loading={busy} style={{ marginTop: spacing.md }} />
 
       {hasArtifact ? (
         <>
-          <TouchableOpacity
-            style={[styles.button, styles.secondaryButton]}
-            onPress={() => void onViewOrShare('view')}
-          >
-            <Text style={styles.secondaryButtonText}>View PDF</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, styles.secondaryButton]}
-            onPress={() => void onViewOrShare('share')}
-          >
-            <Text style={styles.secondaryButtonText}>Share</Text>
-          </TouchableOpacity>
+          <Button label="View PDF" variant="secondary" onPress={() => void onViewOrShare('view')} disabled={busy} style={{ marginTop: spacing.sm }} />
+          <Button label="Share" variant="secondary" onPress={() => void onViewOrShare('share')} disabled={busy} style={{ marginTop: spacing.sm }} />
         </>
       ) : null}
 
       {presentation.status !== 'ARCHIVED' ? (
-        <TouchableOpacity style={styles.archiveButton} onPress={onArchive}>
-          <Text style={styles.archiveButtonText}>Archive Presentation</Text>
-        </TouchableOpacity>
+        <Button label="Archive Presentation" variant="destructive" onPress={onArchive} style={{ marginTop: spacing.lg }} />
       ) : null}
-    </ScrollView>
+    </AppScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  content: { padding: 16, paddingBottom: 48 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  error: { color: '#c0392b' },
-  title: { fontSize: 20, fontWeight: '700' },
-  status: { color: '#666', marginTop: 4, marginBottom: 16 },
-  itemCard: {
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-  },
-  itemTitle: { fontSize: 15, fontWeight: '600' },
-  hint: { color: '#888', fontSize: 13, marginTop: 2 },
-  note: { color: '#1a73e8', fontSize: 13, marginTop: 4, fontStyle: 'italic' },
-  button: { borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 12 },
-  primaryButton: { backgroundColor: '#1a73e8' },
-  primaryButtonText: { color: '#fff', fontWeight: '600' },
-  secondaryButton: { borderWidth: 1, borderColor: '#1a73e8' },
-  secondaryButtonText: { color: '#1a73e8', fontWeight: '600' },
-  archiveButton: {
-    borderWidth: 1,
-    borderColor: '#c0392b',
-    borderRadius: 8,
-    padding: 14,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  archiveButtonText: { color: '#c0392b', fontWeight: '600' },
-});

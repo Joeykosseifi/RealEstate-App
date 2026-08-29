@@ -46,6 +46,9 @@ const PROPERTY_STATUSES = [
 
 const SORT_ORDERS = ['asc', 'desc'] as const;
 
+/** The professional Properties list's primary filter chips (Milestone 7 spec) — publication status, not business status. */
+const PUBLICATION_FILTERS = ['PRIVATE', 'PENDING_REVIEW', 'PUBLISHED'] as const;
+
 export class ListPropertiesQueryDto {
   @IsOptional()
   @Type(() => Number)
@@ -78,6 +81,15 @@ export class ListPropertiesQueryDto {
   @IsOptional()
   @IsIn(PROPERTY_STATUSES)
   propertyStatus?: (typeof PROPERTY_STATUSES)[number];
+
+  /**
+   * Filters by publication lifecycle, not business status (see
+   * docs/PRODUCT.md "Property status — two separate badges, always").
+   * `PRIVATE` means no `PropertyPublication` row at all.
+   */
+  @IsOptional()
+  @IsIn(PUBLICATION_FILTERS)
+  publicationFilter?: (typeof PUBLICATION_FILTERS)[number];
 
   @IsOptional()
   @Type(() => Number)

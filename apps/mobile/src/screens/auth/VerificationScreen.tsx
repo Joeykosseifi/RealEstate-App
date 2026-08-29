@@ -1,15 +1,5 @@
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   requestPhoneOtp,
@@ -20,6 +10,8 @@ import {
 import { useAuth } from '../../auth/AuthContext';
 import { ApiError } from '../../api/client';
 import type { AuthStackParamList } from '../../navigation/AuthStack';
+import { AppScreen, Button, Card, TextField } from '../../components/ui';
+import { colors, spacing, typography } from '../../theme';
 
 export interface VerificationFormProps {
   email: string;
@@ -35,13 +27,13 @@ export interface VerificationFormProps {
 
 /**
  * The shared UI for "Register → Verification required → Enter code →
- * Verified → Continue" (Milestone 6.1 spec §6). Used two ways:
+ * Verified → Continue" (Milestone 6.1 spec §6, restyled Milestone 7).
+ * Used two ways:
  *  - `VerificationScreen` below, reached from `CreateAccount` before any
  *    session exists (email/phone/onVerified=login come from route params).
  *  - `RootNavigator`, rendered directly (no navigation route) for a
  *    `PENDING_VERIFICATION` account that reopens the app or logs back in
- *    before finishing verification — see docs/API.md "Registration →
- *    activation flow" ("PENDING_VERIFICATION accounts can already log in").
+ *    before finishing verification.
  * Both real checks (email token, phone OTP) hit the actual backend
  * verification endpoints — never bypassed or simulated.
  */
@@ -143,130 +135,100 @@ export function VerificationForm({
   const bothVerified = emailVerified && phoneVerified;
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.intro}>
-          Verify your email and phone number to finish setting up your account.
+    <AppScreen>
+      <Text style={[typography.display, styles.intro]}>Verify your account</Text>
+        <Text style={[typography.body, styles.introBody]}>
+          Confirm your email and phone number to finish setting up your account.
         </Text>
 
-        <View style={styles.section}>
+        <Card style={styles.section}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Email — {email}</Text>
+            <Text style={typography.h3}>Email</Text>
             {emailVerified ? <Text style={styles.verifiedBadge}>Verified ✓</Text> : null}
           </View>
+          <Text style={typography.bodySmall}>{email}</Text>
           {!emailVerified && (
             <>
-              <Text style={styles.hint}>Enter the verification code we emailed you.</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Verification token"
-                autoCapitalize="none"
+              <TextField
+                label="Verification code"
+                placeholder="Paste the code from your email"
                 value={emailToken}
                 onChangeText={setEmailToken}
+                autoCapitalize="none"
                 editable={!emailBusy}
               />
               {emailError ? <Text style={styles.error}>{emailError}</Text> : null}
               {emailResent ? <Text style={styles.success}>Verification email resent.</Text> : null}
               <View style={styles.rowButtons}>
-                <TouchableOpacity
-                  style={[
-                    styles.button,
-                    (!emailToken.trim() || emailBusy) && styles.buttonDisabled,
-                  ]}
+                <Button
+                  label="Verify Email"
+                  size="sm"
                   onPress={() => void onVerifyEmail()}
-                  disabled={!emailToken.trim() || emailBusy}
-                >
-                  {emailBusy ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.buttonText}>Verify Email</Text>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.linkButton}
-                  onPress={() => void onResendEmail()}
-                  disabled={emailBusy}
-                >
-                  <Text style={styles.linkButtonText}>Resend</Text>
+                  loading={emailBusy}
+                  disabled={!emailToken.trim()}
+                />
+                <TouchableOpacity onPress={() => void onResendEmail()} disabled={emailBusy} hitSlop={8}>
+                  <Text style={styles.linkText}>Resend</Text>
                 </TouchableOpacity>
               </View>
             </>
           )}
-        </View>
+        </Card>
 
-        <View style={styles.section}>
+        <Card style={styles.section}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Phone — {phone}</Text>
+            <Text style={typography.h3}>Phone</Text>
             {phoneVerified ? <Text style={styles.verifiedBadge}>Verified ✓</Text> : null}
           </View>
+          <Text style={typography.bodySmall}>{phone}</Text>
           {!phoneVerified && (
             <>
-              <Text style={styles.hint}>Enter the 6-digit code we texted you.</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="6-digit code"
-                keyboardType="number-pad"
-                maxLength={6}
+              <TextField
+                label="6-digit code"
+                placeholder="000000"
                 value={otp}
                 onChangeText={setOtp}
+                keyboardType="number-pad"
+                maxLength={6}
                 editable={!phoneBusy}
               />
               {phoneError ? <Text style={styles.error}>{phoneError}</Text> : null}
               {otpResent ? <Text style={styles.success}>Verification code resent.</Text> : null}
               <View style={styles.rowButtons}>
-                <TouchableOpacity
-                  style={[
-                    styles.button,
-                    (otp.trim().length !== 6 || phoneBusy) && styles.buttonDisabled,
-                  ]}
+                <Button
+                  label="Verify Phone"
+                  size="sm"
                   onPress={() => void onVerifyOtp()}
-                  disabled={otp.trim().length !== 6 || phoneBusy}
-                >
-                  {phoneBusy ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.buttonText}>Verify Phone</Text>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.linkButton}
-                  onPress={() => void onResendOtp()}
-                  disabled={phoneBusy}
-                >
-                  <Text style={styles.linkButtonText}>Resend</Text>
+                  loading={phoneBusy}
+                  disabled={otp.trim().length !== 6}
+                />
+                <TouchableOpacity onPress={() => void onResendOtp()} disabled={phoneBusy} hitSlop={8}>
+                  <Text style={styles.linkText}>Resend</Text>
                 </TouchableOpacity>
               </View>
             </>
           )}
-        </View>
+        </Card>
 
-        <TouchableOpacity
-          style={[styles.continueButton, !bothVerified && styles.buttonDisabled]}
+        <Button
+          label="Continue"
           onPress={() => void onContinue()}
-          disabled={!bothVerified || continuing}
-        >
-          {continuing ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Continue</Text>
-          )}
-        </TouchableOpacity>
+          loading={continuing}
+          disabled={!bothVerified}
+          style={styles.continueButton}
+        />
 
         {onBack ? (
-          <TouchableOpacity style={styles.linkButton} onPress={onBack} disabled={continuing}>
-            <Text style={styles.linkButtonText}>Back</Text>
+          <TouchableOpacity style={styles.footerLink} onPress={onBack} disabled={continuing}>
+            <Text style={styles.linkText}>Back</Text>
           </TouchableOpacity>
         ) : null}
         {onSignOut ? (
-          <TouchableOpacity style={styles.linkButton} onPress={onSignOut} disabled={continuing}>
-            <Text style={styles.linkButtonText}>Sign out</Text>
+          <TouchableOpacity style={styles.footerLink} onPress={onSignOut} disabled={continuing}>
+            <Text style={styles.linkText}>Sign out</Text>
           </TouchableOpacity>
         ) : null}
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </AppScreen>
   );
 }
 
@@ -290,52 +252,15 @@ export function VerificationScreen({ route, navigation }: Props): React.JSX.Elem
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: '#fff' },
-  container: { padding: 24, paddingBottom: 48 },
-  intro: { fontSize: 15, color: '#444', marginBottom: 24, lineHeight: 21 },
-  section: {
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 10,
-    padding: 16,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  sectionTitle: { fontSize: 15, fontWeight: '600', flexShrink: 1 },
-  verifiedBadge: { color: '#1a7f37', fontWeight: '600', fontSize: 13 },
-  hint: { color: '#888', fontSize: 13, marginBottom: 8 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#d0d0d0',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    fontSize: 16,
-  },
-  rowButtons: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  button: {
-    backgroundColor: '#1a73e8',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    alignItems: 'center',
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  linkButton: { paddingVertical: 8, alignItems: 'center' },
-  linkButtonText: { color: '#1a73e8', fontWeight: '600', fontSize: 14 },
-  continueButton: {
-    backgroundColor: '#1a7f37',
-    borderRadius: 8,
-    padding: 14,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  error: { color: '#c0392b', fontSize: 13, marginBottom: 8 },
-  success: { color: '#1a7f37', fontSize: 13, marginBottom: 8 },
+  intro: { marginTop: spacing.xl, marginBottom: spacing.xs },
+  introBody: { color: colors.text.secondary, marginBottom: spacing.lg },
+  section: { marginBottom: spacing.md },
+  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  verifiedBadge: { color: colors.success, fontWeight: '700', fontSize: 13 },
+  rowButtons: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, marginTop: spacing.xs },
+  linkText: { color: colors.brand.primaryNavy, fontWeight: '600', fontSize: 14 },
+  error: { color: colors.danger, fontSize: 13, marginBottom: spacing.xs },
+  success: { color: colors.success, fontSize: 13, marginBottom: spacing.xs },
+  continueButton: { marginTop: spacing.sm },
+  footerLink: { alignItems: 'center', marginTop: spacing.md },
 });

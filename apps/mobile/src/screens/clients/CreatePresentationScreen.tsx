@@ -1,13 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../auth/AuthContext';
 import { getClient, listShortlist } from '../../api/clients';
@@ -15,14 +7,17 @@ import { createPresentation, generatePresentation } from '../../api/presentation
 import { ApiError } from '../../api/client';
 import type { ClientPropertyShortlistItem } from '../../api/types';
 import type { ClientsStackParamList } from '../../navigation/ClientsStack';
+import { AppScreen, Button, Card, LoadingState, TextField } from '../../components/ui';
+import { colors, radii, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<ClientsStackParamList, 'CreatePresentation'>;
 
 /**
  * Selection + reorder + per-property notes + title, then Generate — one
- * screen covering the whole "Create Presentation" flow from the spec.
- * Reordering is up/down arrows rather than drag-and-drop, which keeps
- * this screen usable without adding a gesture-handling dependency.
+ * screen covering the whole "Create Presentation" flow (Milestone 7
+ * spec §27). Reordering is up/down arrows rather than drag-and-drop,
+ * which keeps this screen usable without a gesture-handling dependency.
+ * Presentation-safe generation behavior is unchanged from Milestone 4.
  */
 export function CreatePresentationScreen({ route, navigation }: Props): React.JSX.Element {
   const { clientId, propertyIds } = route.params;
@@ -57,11 +52,7 @@ export function CreatePresentationScreen({ route, navigation }: Props): React.JS
   }, [load]);
 
   const toggle = (propertyId: string) => {
-    setOrder((current) =>
-      current.includes(propertyId)
-        ? current.filter((id) => id !== propertyId)
-        : [...current, propertyId],
-    );
+    setOrder((current) => (current.includes(propertyId) ? current.filter((id) => id !== propertyId) : [...current, propertyId]));
   };
 
   const move = (index: number, direction: -1 | 1) => {
@@ -86,10 +77,7 @@ export function CreatePresentationScreen({ route, navigation }: Props): React.JS
       const presentation = await createPresentation(currentWorkspace.id, {
         title: title.trim() || 'Properties for You',
         clientId,
-        items: order.map((propertyId) => ({
-          propertyId,
-          agentNote: notes[propertyId]?.trim() || undefined,
-        })),
+        items: order.map((propertyId) => ({ propertyId, agentNote: notes[propertyId]?.trim() || undefined })),
       });
       await generatePresentation(currentWorkspace.id, presentation.id);
       navigation.replace('PresentationDetail', { presentationId: presentation.id });
@@ -100,74 +88,53 @@ export function CreatePresentationScreen({ route, navigation }: Props): React.JS
     }
   };
 
-  if (loading) {
-    return <ActivityIndicator style={styles.center} />;
-  }
+  if (loading) return <LoadingState />;
 
   const byId = new Map(shortlist.map((item) => [item.propertyId, item]));
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.sectionTitle}>Title</Text>
-      <TextInput style={styles.input} value={title} onChangeText={setTitle} />
+    <AppScreen>
+      <TextField label="Title" value={title} onChangeText={setTitle} />
 
-      <Text style={styles.sectionTitle}>Choose Properties</Text>
+      <Text style={typography.label}>Choose Properties</Text>
       {shortlist.length === 0 ? (
-        <Text style={styles.hint}>Nothing shortlisted for this client yet.</Text>
+        <Text style={typography.bodySmall}>Nothing shortlisted for this client yet.</Text>
       ) : (
         shortlist.map((item) => {
           const isSelected = order.includes(item.propertyId);
           return (
-            <TouchableOpacity
-              key={item.id}
-              style={[styles.pickRow, isSelected && styles.pickRowSelected]}
-              onPress={() => toggle(item.propertyId)}
-            >
-              <Text style={styles.pickRowTitle}>{item.property.title}</Text>
-              <Text style={styles.hint}>
+            <Card key={item.id} onPress={() => toggle(item.propertyId)} style={[{ marginBottom: spacing.sm }, isSelected && { borderColor: colors.brand.primaryNavy, backgroundColor: colors.selectedTint }]}>
+              <Text style={typography.h3}>{item.property.title}</Text>
+              <Text style={typography.bodySmall}>
                 {item.property.currency} {item.property.price.toLocaleString()}
               </Text>
-            </TouchableOpacity>
+            </Card>
           );
         })
       )}
 
       {order.length > 0 ? (
         <>
-          <Text style={styles.sectionTitle}>Order & Notes</Text>
+          <Text style={[typography.label, { marginTop: spacing.md }]}>Order & Notes</Text>
           {order.map((propertyId, index) => {
             const item = byId.get(propertyId);
             return (
-              <View key={propertyId} style={styles.orderRow}>
-                <View style={styles.orderControls}>
+              <View key={propertyId} style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm, alignItems: 'flex-start' }}>
+                <View style={{ gap: 4 }}>
                   <TouchableOpacity onPress={() => move(index, -1)} disabled={index === 0}>
-                    <Text style={[styles.moveButton, index === 0 && styles.moveButtonDisabled]}>
-                      ▲
-                    </Text>
+                    <Text style={{ fontSize: 16, padding: 4, color: index === 0 ? colors.border : colors.brand.primaryNavy }}>▲</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => move(index, 1)}
-                    disabled={index === order.length - 1}
-                  >
-                    <Text
-                      style={[
-                        styles.moveButton,
-                        index === order.length - 1 && styles.moveButtonDisabled,
-                      ]}
-                    >
-                      ▼
-                    </Text>
+                  <TouchableOpacity onPress={() => move(index, 1)} disabled={index === order.length - 1}>
+                    <Text style={{ fontSize: 16, padding: 4, color: index === order.length - 1 ? colors.border : colors.brand.primaryNavy }}>▼</Text>
                   </TouchableOpacity>
                 </View>
-                <View style={styles.orderContent}>
-                  <Text style={styles.pickRowTitle}>{item?.property.title ?? propertyId}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={typography.h3}>{item?.property.title ?? propertyId}</Text>
                   <TextInput
-                    style={styles.noteInput}
+                    style={{ borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radii.input, padding: spacing.sm, fontSize: 14, marginTop: spacing.xs }}
                     placeholder="Note for the client (optional)"
                     value={notes[propertyId] ?? ''}
-                    onChangeText={(text) =>
-                      setNotes((current) => ({ ...current, [propertyId]: text }))
-                    }
+                    onChangeText={(text) => setNotes((current) => ({ ...current, [propertyId]: text }))}
                   />
                 </View>
               </View>
@@ -176,73 +143,9 @@ export function CreatePresentationScreen({ route, navigation }: Props): React.JS
         </>
       ) : null}
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <Text style={{ color: colors.danger, marginTop: spacing.md, textAlign: 'center' }}>{error}</Text> : null}
 
-      <TouchableOpacity
-        style={[styles.generateButton, submitting && styles.buttonDisabled]}
-        onPress={() => void onGenerate()}
-        disabled={submitting}
-      >
-        {submitting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.generateButtonText}>Generate PDF</Text>
-        )}
-      </TouchableOpacity>
-    </ScrollView>
+      <Button label="Generate PDF" onPress={() => void onGenerate()} loading={submitting} style={{ marginTop: spacing.lg }} />
+    </AppScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  content: { padding: 16, paddingBottom: 48 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#555',
-    textTransform: 'uppercase',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#d0d0d0',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  hint: { color: '#888', fontSize: 13 },
-  pickRow: {
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  pickRowSelected: { borderColor: '#1a73e8', backgroundColor: '#eef4ff' },
-  pickRowTitle: { fontSize: 15, fontWeight: '600' },
-  orderRow: { flexDirection: 'row', gap: 8, marginBottom: 8, alignItems: 'flex-start' },
-  orderControls: { gap: 4 },
-  moveButton: { fontSize: 16, color: '#1a73e8', padding: 4 },
-  moveButtonDisabled: { color: '#ccc' },
-  orderContent: { flex: 1 },
-  noteInput: {
-    borderWidth: 1,
-    borderColor: '#d0d0d0',
-    borderRadius: 8,
-    padding: 8,
-    fontSize: 14,
-    marginTop: 4,
-  },
-  error: { color: '#c0392b', marginTop: 12, textAlign: 'center' },
-  generateButton: {
-    backgroundColor: '#1a73e8',
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  generateButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-});

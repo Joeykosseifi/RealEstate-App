@@ -19,6 +19,8 @@ import {
   draftFromPlaceDetails,
   type LocationDraft,
 } from './locationPayload';
+import { Button } from '../components/ui';
+import { colors, radii, spacing } from '../theme';
 
 /** Arbitrary starting view when nothing has been picked yet — the user must
  * still search, tap, or use their current location to actually place a pin. */
@@ -193,28 +195,22 @@ export function MapLocationPicker({
           <Text style={styles.privacyText}>
             Exact property location is private and visible only to authorized professionals.
           </Text>
-          <TouchableOpacity
-            style={styles.secondaryButton}
+          <Button
+            label="Use my current location"
+            variant="secondary"
+            size="sm"
             onPress={() => void onUseCurrentLocation()}
-            disabled={locating}
-          >
-            {locating ? (
-              <ActivityIndicator />
-            ) : (
-              <Text style={styles.secondaryButtonText}>Use my current location</Text>
-            )}
-          </TouchableOpacity>
+            loading={locating}
+            style={styles.secondaryButton}
+          />
           <View style={styles.actionRow}>
-            <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.saveButton, !draft && styles.buttonDisabled]}
+            <Button label="Cancel" variant="secondary" onPress={onCancel} style={styles.flex1} />
+            <Button
+              label="Save Location"
               onPress={() => draft && onSave(draft)}
               disabled={!draft}
-            >
-              <Text style={styles.saveButtonText}>Save Location</Text>
-            </TouchableOpacity>
+              style={styles.flex1}
+            />
           </View>
         </View>
       </View>
@@ -223,57 +219,32 @@ export function MapLocationPicker({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  searchBar: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8 },
+  container: { flex: 1, backgroundColor: colors.surface },
+  searchBar: { flexDirection: 'row', alignItems: 'center', padding: spacing.smd, gap: spacing.sm },
   searchInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#d0d0d0',
-    borderRadius: 8,
-    padding: 12,
+    borderColor: colors.borderStrong,
+    borderRadius: radii.input,
+    padding: spacing.smd,
     fontSize: 16,
   },
-  searchSpinner: { marginLeft: 4 },
-  error: { color: '#c0392b', paddingHorizontal: 12, paddingBottom: 4 },
+  searchSpinner: { marginLeft: spacing.xs },
+  error: { color: colors.danger, paddingHorizontal: spacing.smd, paddingBottom: spacing.xs },
   suggestions: {
     maxHeight: 200,
-    marginHorizontal: 12,
+    marginHorizontal: spacing.smd,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    backgroundColor: '#fff',
+    borderColor: colors.border,
+    borderRadius: radii.input,
+    backgroundColor: colors.surface,
   },
-  suggestionRow: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  suggestionText: { fontSize: 14, color: '#333' },
+  suggestionRow: { padding: spacing.smd, borderBottomWidth: 1, borderBottomColor: colors.border },
+  suggestionText: { fontSize: 14, color: colors.text.primary },
   map: { flex: 1 },
-  footer: { padding: 16, borderTopWidth: 1, borderTopColor: '#eee' },
-  privacyText: { color: '#888', fontSize: 12, marginBottom: 10 },
-  secondaryButton: {
-    alignSelf: 'flex-start',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#eef4ff',
-    marginBottom: 12,
-  },
-  secondaryButtonText: { color: '#1a73e8', fontWeight: '600' },
-  actionRow: { flexDirection: 'row', gap: 12 },
-  cancelButton: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#d0d0d0',
-    alignItems: 'center',
-  },
-  cancelButtonText: { color: '#333', fontWeight: '600' },
-  saveButton: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 8,
-    backgroundColor: '#1a73e8',
-    alignItems: 'center',
-  },
-  buttonDisabled: { opacity: 0.6 },
-  saveButtonText: { color: '#fff', fontWeight: '600' },
+  footer: { padding: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
+  privacyText: { color: colors.text.secondary, fontSize: 12, marginBottom: spacing.smd },
+  secondaryButton: { alignSelf: 'flex-start', marginBottom: spacing.smd },
+  actionRow: { flexDirection: 'row', gap: spacing.smd },
+  flex1: { flex: 1 },
 });

@@ -1,13 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, Text, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../auth/AuthContext';
 import { archiveClient, archiveRequirement, getClient, restoreClient } from '../../api/clients';
@@ -15,18 +7,33 @@ import { listPresentations } from '../../api/presentations';
 import { ApiError } from '../../api/client';
 import type { ClientDetail, PropertyPresentationSummary } from '../../api/types';
 import type { ClientsStackParamList } from '../../navigation/ClientsStack';
+import {
+  AppScreen,
+  Button,
+  Card,
+  ErrorState,
+  LoadingState,
+  SectionHeader,
+  confirmDestructive,
+} from '../../components/ui';
+import { colors, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<ClientsStackParamList, 'ClientDetail'>;
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <View style={styles.detailRow}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value}</Text>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.xs }}>
+      <Text style={typography.bodySmall}>{label}</Text>
+      <Text style={[typography.body, { fontWeight: '600' }]}>{value}</Text>
     </View>
   );
 }
 
+/**
+ * Client detail — the hub of the CRM workflow (Milestone 7 spec §25):
+ * Client → Requirements → Matches → Shortlist → Presentation, each with
+ * an obvious CTA so the agent never hunts across screens.
+ */
 export function ClientDetailScreen({ route, navigation }: Props): React.JSX.Element {
   const { clientId } = route.params;
   const { currentWorkspace, permissions } = useAuth();
@@ -61,27 +68,16 @@ export function ClientDetailScreen({ route, navigation }: Props): React.JSX.Elem
     return unsubscribe;
   }, [navigation, load]);
 
-  const onArchive = () => {
-    if (!currentWorkspace) return;
-    Alert.alert('Archive client', 'This can be restored later. Continue?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Archive',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await archiveClient(currentWorkspace.id, clientId);
-            void load();
-          } catch (err) {
-            Alert.alert(
-              'Could not archive',
-              err instanceof ApiError ? err.message : 'Please try again.',
-            );
-          }
-        },
-      },
-    ]);
-  };
+  const onArchive = () =>
+    confirmDestructive('Archive client', 'This can be restored later. Continue?', 'Archive', async () => {
+      if (!currentWorkspace) return;
+      try {
+        await archiveClient(currentWorkspace.id, clientId);
+        void load();
+      } catch (err) {
+        Alert.alert('Could not archive', err instanceof ApiError ? err.message : 'Please try again.');
+      }
+    });
 
   const onRestore = async () => {
     if (!currentWorkspace) return;
@@ -93,225 +89,107 @@ export function ClientDetailScreen({ route, navigation }: Props): React.JSX.Elem
     }
   };
 
-  const onArchiveRequirement = (requirementId: string) => {
-    if (!currentWorkspace) return;
-    Alert.alert(
+  const onArchiveRequirement = (requirementId: string) =>
+    confirmDestructive(
       'Archive requirement',
       'This preserves history and can be recreated later. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Archive',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await archiveRequirement(currentWorkspace.id, clientId, requirementId);
-              void load();
-            } catch (err) {
-              Alert.alert(
-                'Could not archive',
-                err instanceof ApiError ? err.message : 'Please try again.',
-              );
-            }
-          },
-        },
-      ],
+      'Archive',
+      async () => {
+        if (!currentWorkspace) return;
+        try {
+          await archiveRequirement(currentWorkspace.id, clientId, requirementId);
+          void load();
+        } catch (err) {
+          Alert.alert('Could not archive', err instanceof ApiError ? err.message : 'Please try again.');
+        }
+      },
     );
-  };
 
-  if (loading) {
-    return <ActivityIndicator style={styles.center} />;
-  }
-  if (error || !client) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.error}>{error ?? 'Client not found.'}</Text>
-      </View>
-    );
-  }
+  if (loading) return <LoadingState />;
+  if (error || !client) return <ErrorState message={error ?? 'Client not found.'} onRetry={() => void load()} />;
 
   const canEdit = permissions.has('client.edit');
   const canArchive = permissions.has('client.archive');
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>
+    <AppScreen>
+      <Text style={typography.h1}>
         {client.firstName} {client.lastName}
       </Text>
-      <Text style={styles.status}>
+      <Text style={[typography.bodySmall, { marginTop: spacing.xs, marginBottom: spacing.lg }]}>
         {client.status}
         {client.source ? ` · ${client.source}` : ''}
         {client.assignedToUserId ? ' · Assigned' : ''}
       </Text>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Contact</Text>
+      <Card style={{ marginBottom: spacing.lg }}>
+        <SectionHeader title="Contact" />
         <Row label="Phone" value={client.phone} />
         {client.whatsappPhone ? <Row label="WhatsApp" value={client.whatsappPhone} /> : null}
         {client.email ? <Row label="Email" value={client.email} /> : null}
-        {client.notes ? <Text style={styles.notes}>{client.notes}</Text> : null}
-      </View>
+        {client.notes ? <Text style={[typography.body, { marginTop: spacing.sm }]}>{client.notes}</Text> : null}
+      </Card>
 
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Requirements</Text>
-          {canEdit ? (
-            <TouchableOpacity onPress={() => navigation.navigate('AddRequirement', { clientId })}>
-              <Text style={styles.linkText}>+ Add</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
+      <View style={{ marginBottom: spacing.lg }}>
+        <SectionHeader title="Requirements" actionLabel={canEdit ? '+ Add' : undefined} onAction={() => navigation.navigate('AddRequirement', { clientId })} />
         {client.requirements.length === 0 ? (
-          <Text style={styles.hint}>No requirements yet.</Text>
+          <Text style={typography.bodySmall}>No requirements yet.</Text>
         ) : (
           client.requirements.map((requirement) => (
-            <View key={requirement.id} style={styles.requirementCard}>
-              <Text style={styles.requirementTitle}>{requirement.title}</Text>
-              <Text style={styles.requirementSubtitle}>
+            <Card key={requirement.id} style={{ marginBottom: spacing.sm }}>
+              <Text style={typography.h3}>{requirement.title}</Text>
+              <Text style={typography.bodySmall}>
                 {requirement.listingPurpose} · {requirement.propertyTypes.join(', ') || 'Any type'}
               </Text>
               {requirement.maxPrice ? (
-                <Text style={styles.requirementSubtitle}>
+                <Text style={typography.bodySmall}>
                   Up to {requirement.currency} {requirement.maxPrice.toLocaleString()}
                 </Text>
               ) : null}
-              <View style={styles.requirementActions}>
-                <TouchableOpacity
-                  style={styles.secondaryButton}
-                  onPress={() =>
-                    navigation.navigate('MatchResults', {
-                      clientId,
-                      requirementId: requirement.id,
-                      requirementTitle: requirement.title,
-                    })
-                  }
-                >
-                  <Text style={styles.secondaryButtonText}>Find Matches</Text>
-                </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.lg, marginTop: spacing.sm }}>
+                <Button
+                  label="Find Matches"
+                  size="sm"
+                  variant="secondary"
+                  onPress={() => navigation.navigate('MatchResults', { clientId, requirementId: requirement.id, requirementTitle: requirement.title })}
+                />
                 {canEdit ? (
                   <TouchableOpacity onPress={() => onArchiveRequirement(requirement.id)}>
-                    <Text style={styles.archiveLink}>Archive</Text>
+                    <Text style={{ color: colors.danger, fontSize: 13, fontWeight: '600' }}>Archive</Text>
                   </TouchableOpacity>
                 ) : null}
               </View>
-            </View>
+            </Card>
           ))
         )}
       </View>
 
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Shortlist ({client.shortlist.length})</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Shortlist', { clientId })}>
-            <Text style={styles.linkText}>View</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <Card style={{ marginBottom: spacing.lg }}>
+        <SectionHeader title={`Shortlist (${client.shortlist.length})`} actionLabel="View" onAction={() => navigation.navigate('Shortlist', { clientId })} />
+      </Card>
 
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Presentations</Text>
-          <TouchableOpacity
-            onPress={() => navigation.navigate('CreatePresentation', { clientId, propertyIds: [] })}
-          >
-            <Text style={styles.linkText}>+ New</Text>
-          </TouchableOpacity>
-        </View>
+      <View style={{ marginBottom: spacing.lg }}>
+        <SectionHeader title="Presentations" actionLabel="+ New" onAction={() => navigation.navigate('CreatePresentation', { clientId, propertyIds: [] })} />
         {presentations.length === 0 ? (
-          <Text style={styles.hint}>No presentations yet.</Text>
+          <Text style={typography.bodySmall}>No presentations yet.</Text>
         ) : (
           presentations.map((presentation) => (
-            <TouchableOpacity
-              key={presentation.id}
-              style={styles.presentationRow}
-              onPress={() =>
-                navigation.navigate('PresentationDetail', { presentationId: presentation.id })
-              }
-            >
-              <Text style={styles.presentationTitle}>{presentation.title}</Text>
-              <Text style={styles.hint}>
-                {presentation.status} · {presentation.itemCount} propert
-                {presentation.itemCount === 1 ? 'y' : 'ies'}
+            <Card key={presentation.id} onPress={() => navigation.navigate('PresentationDetail', { presentationId: presentation.id })} style={{ marginBottom: spacing.sm }}>
+              <Text style={typography.h3}>{presentation.title}</Text>
+              <Text style={typography.bodySmall}>
+                {presentation.status} · {presentation.itemCount} propert{presentation.itemCount === 1 ? 'y' : 'ies'}
               </Text>
-            </TouchableOpacity>
+            </Card>
           ))
         )}
       </View>
 
       {canArchive && client.status !== 'ARCHIVED' ? (
-        <TouchableOpacity style={styles.archiveButton} onPress={onArchive}>
-          <Text style={styles.archiveButtonText}>Archive Client</Text>
-        </TouchableOpacity>
+        <Button label="Archive Client" variant="destructive" onPress={onArchive} style={{ marginTop: spacing.sm }} />
       ) : null}
       {canArchive && client.status === 'ARCHIVED' ? (
-        <TouchableOpacity style={styles.restoreButton} onPress={() => void onRestore()}>
-          <Text style={styles.restoreButtonText}>Restore Client</Text>
-        </TouchableOpacity>
+        <Button label="Restore Client" onPress={() => void onRestore()} style={{ marginTop: spacing.sm }} />
       ) : null}
-    </ScrollView>
+    </AppScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  content: { padding: 16, paddingBottom: 48 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  error: { color: '#c0392b' },
-  title: { fontSize: 22, fontWeight: '700' },
-  status: { color: '#666', marginTop: 4, marginBottom: 16 },
-  section: { marginBottom: 20 },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#555', textTransform: 'uppercase' },
-  linkText: { color: '#1a73e8', fontWeight: '600' },
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  detailLabel: { color: '#888' },
-  detailValue: { fontWeight: '500' },
-  notes: { color: '#333', marginTop: 8 },
-  hint: { color: '#888', fontSize: 13 },
-  requirementCard: {
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-  },
-  requirementTitle: { fontSize: 15, fontWeight: '600' },
-  requirementSubtitle: { color: '#666', fontSize: 13, marginTop: 2 },
-  requirementActions: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 8 },
-  secondaryButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#eef4ff',
-  },
-  secondaryButtonText: { color: '#1a73e8', fontWeight: '600', fontSize: 13 },
-  archiveLink: { color: '#c0392b', fontSize: 13 },
-  presentationRow: {
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#eee',
-  },
-  presentationTitle: { fontSize: 15, fontWeight: '500' },
-  archiveButton: {
-    borderWidth: 1,
-    borderColor: '#c0392b',
-    borderRadius: 8,
-    padding: 14,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  archiveButtonText: { color: '#c0392b', fontWeight: '600' },
-  restoreButton: {
-    backgroundColor: '#1a73e8',
-    borderRadius: 8,
-    padding: 14,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  restoreButtonText: { color: '#fff', fontWeight: '600' },
-});

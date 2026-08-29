@@ -1,18 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { listFavorites } from '../../api/marketplace';
 import type { MarketplaceFavoriteItem } from '../../api/types';
 import type { FavoritesStackParamList } from '../../navigation/client/FavoritesStack';
 import { ListingCard } from './ListingCard';
+import { EmptyState, ErrorState, LoadingState } from '../../components/ui';
+import { colors, radii, screenPadding, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<FavoritesStackParamList, 'FavoritesList'>;
 
 /**
- * Marketplace favorites — distinct from the professional CRM shortlist
- * (Milestone 4). A favorite whose listing has since become unavailable
- * shows a plain "no longer available" row rather than stale or leaked
- * data — see docs/PERMISSIONS.md "Favorite of an unpublished listing."
+ * Marketplace favorites (Milestone 7 spec §23) — reuses the same public
+ * `ListingCard` as Home/Search. Distinct from the professional CRM
+ * shortlist (Milestone 4). A favorite whose listing has since become
+ * unavailable shows a plain "no longer available" row rather than stale
+ * or leaked data.
  */
 export function FavoritesScreen({ navigation }: Props): React.JSX.Element {
   const [items, setItems] = useState<MarketplaceFavoriteItem[]>([]);
@@ -40,16 +43,8 @@ export function FavoritesScreen({ navigation }: Props): React.JSX.Element {
     return unsubscribe;
   }, [navigation, load]);
 
-  if (loading) {
-    return <ActivityIndicator style={styles.center} />;
-  }
-  if (error) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.error}>{error}</Text>
-      </View>
-    );
-  }
+  if (loading) return <LoadingState />;
+  if (error) return <ErrorState message={error} onRetry={() => void load()} />;
 
   return (
     <FlatList
@@ -58,38 +53,27 @@ export function FavoritesScreen({ navigation }: Props): React.JSX.Element {
       contentContainerStyle={styles.listContent}
       renderItem={({ item }) =>
         item.listing ? (
-          <ListingCard
-            listing={item.listing}
-            style={styles.card}
-            onPress={() =>
-              navigation.navigate('MarketplaceDetail', { publicationId: item.publicationId })
-            }
-          />
+          <ListingCard listing={item.listing} style={styles.card} onPress={() => navigation.navigate('MarketplaceDetail', { publicationId: item.publicationId })} />
         ) : (
           <View style={styles.unavailableRow}>
-            <Text style={styles.unavailableText}>This listing is no longer available.</Text>
+            <Text style={typography.bodySmall}>This listing is no longer available.</Text>
           </View>
         )
       }
-      ListEmptyComponent={
-        <View style={styles.center}>
-          <Text>No favorites yet.</Text>
-        </View>
-      }
+      ListEmptyComponent={<EmptyState icon="⭐" title="You haven't saved any properties yet." message="Browse the marketplace to find properties you like." />}
     />
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  error: { color: '#c0392b' },
-  listContent: { padding: 12 },
-  card: { width: '100%', marginBottom: 12 },
+  listContent: { padding: screenPadding },
+  card: { width: '100%', marginBottom: spacing.smd },
   unavailableRow: {
-    padding: 16,
-    marginBottom: 12,
-    borderRadius: 8,
-    backgroundColor: '#f7f7f7',
+    padding: spacing.md,
+    marginBottom: spacing.smd,
+    borderRadius: radii.card,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  unavailableText: { color: '#888' },
 });

@@ -92,6 +92,8 @@ export interface PropertyListItem {
   city: string | null;
   area: string | null;
   primaryMedia: PropertyMediaSummary | null;
+  /** `null` when the property has no publication row at all — i.e. private. */
+  publicationStatus: PropertyPublicationStatus | null;
 }
 
 export interface PropertyLocation {

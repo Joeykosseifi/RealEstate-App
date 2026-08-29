@@ -1,18 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { searchMarketplace } from '../../api/marketplace';
 import type { PublicPropertyListItem } from '../../api/types';
 import type { SearchStackParamList } from '../../navigation/client/SearchStack';
 import { ListingCard } from './ListingCard';
+import { EmptyState, ErrorState, FilterChip, SearchInput, SkeletonList } from '../../components/ui';
+import { colors, screenPadding, spacing } from '../../theme';
 
 type Props = NativeStackScreenProps<SearchStackParamList, 'MarketplaceSearch'>;
 
@@ -30,11 +24,10 @@ const SORT_OPTIONS: { label: string; value: 'newest' | 'price_asc' | 'price_desc
 
 const PAGE_SIZE = 20;
 
+/** Client search (Milestone 7 spec §21) — active filters always visible, easy to clear, compact 2-column results. */
 export function MarketplaceSearchScreen({ route, navigation }: Props): React.JSX.Element {
   const [search, setSearch] = useState('');
-  const [listingPurpose, setListingPurpose] = useState<'SALE' | 'RENT' | undefined>(
-    route.params?.listingPurpose,
-  );
+  const [listingPurpose, setListingPurpose] = useState<'SALE' | 'RENT' | undefined>(route.params?.listingPurpose);
   const [sort, setSort] = useState<'newest' | 'price_asc' | 'price_desc'>('newest');
   const [items, setItems] = useState<PublicPropertyListItem[]>([]);
   const [page, setPage] = useState(1);
@@ -88,63 +81,32 @@ export function MarketplaceSearchScreen({ route, navigation }: Props): React.JSX
 
   return (
     <View style={styles.container}>
-      <View style={styles.searchRow}>
-        <TextInput
-          style={[styles.search, styles.flex1]}
-          placeholder="Search title, city, area…"
-          value={search}
-          onChangeText={setSearch}
-          onSubmitEditing={() => void load(1, true)}
-        />
-        {search !== '' && (
-          <TouchableOpacity
-            style={styles.clearSearchButton}
-            onPress={() => setSearch('')}
-            accessibilityLabel="Clear search"
-          >
-            <Text style={styles.clearSearchButtonText}>✕</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      <View style={styles.header}>
+        <SearchInput value={search} onChangeText={setSearch} placeholder="Search title, city, area…" onSubmit={() => void load(1, true)} />
 
-      <View style={styles.filterRow}>
-        {PURPOSE_FILTERS.map((filter) => (
-          <TouchableOpacity
-            key={filter.label}
-            style={[styles.chip, listingPurpose === filter.value && styles.chipActive]}
-            onPress={() => setListingPurpose(filter.value)}
-          >
-            <Text
-              style={[styles.chipText, listingPurpose === filter.value && styles.chipTextActive]}
-            >
-              {filter.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      <View style={styles.filterRow}>
-        {SORT_OPTIONS.map((option) => (
-          <TouchableOpacity
-            key={option.value}
-            style={[styles.chip, sort === option.value && styles.chipActive]}
-            onPress={() => setSort(option.value)}
-          >
-            <Text style={[styles.chipText, sort === option.value && styles.chipTextActive]}>
-              {option.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-        {hasActiveFilters && (
-          <TouchableOpacity style={styles.clearFiltersButton} onPress={clearFilters}>
-            <Text style={styles.clearFiltersText}>Clear filters</Text>
-          </TouchableOpacity>
-        )}
+        <View style={styles.filterRow}>
+          {PURPOSE_FILTERS.map((filter) => (
+            <FilterChip key={filter.label} label={filter.label} selected={listingPurpose === filter.value} onPress={() => setListingPurpose(filter.value)} />
+          ))}
+        </View>
+        <View style={styles.filterRow}>
+          {SORT_OPTIONS.map((option) => (
+            <FilterChip key={option.value} label={option.label} selected={sort === option.value} onPress={() => setSort(option.value)} />
+          ))}
+          {hasActiveFilters && (
+            <TouchableOpacity style={styles.clearFiltersButton} onPress={clearFilters}>
+              <Text style={styles.clearFiltersText}>Clear filters</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {loading ? (
-        <ActivityIndicator style={styles.center} />
+        <View style={styles.listPadding}>
+          <SkeletonList />
+        </View>
       ) : error ? (
-        <Text style={styles.error}>{error}</Text>
+        <ErrorState message={error} onRetry={() => void load(1, true)} />
       ) : (
         <FlatList
           data={items}
@@ -155,22 +117,10 @@ export function MarketplaceSearchScreen({ route, navigation }: Props): React.JSX
           onEndReachedThreshold={0.4}
           onEndReached={onEndReached}
           renderItem={({ item }) => (
-            <ListingCard
-              listing={item}
-              style={styles.gridCard}
-              onPress={() =>
-                navigation.navigate('MarketplaceDetail', { publicationId: item.publicationId })
-              }
-            />
+            <ListingCard listing={item} style={styles.gridCard} onPress={() => navigation.navigate('MarketplaceDetail', { publicationId: item.publicationId })} />
           )}
-          ListFooterComponent={
-            loadingMore ? <ActivityIndicator style={styles.footerLoading} /> : null
-          }
-          ListEmptyComponent={
-            <View style={styles.center}>
-              <Text>No listings match your search.</Text>
-            </View>
-          }
+          ListFooterComponent={loadingMore ? <SkeletonList count={2} /> : null}
+          ListEmptyComponent={<EmptyState icon="🔍" title="No listings match your search." message="Try adjusting or clearing your filters." />}
         />
       )}
     </View>
@@ -178,42 +128,13 @@ export function MarketplaceSearchScreen({ route, navigation }: Props): React.JSX
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', margin: 12, gap: 8 },
-  flex1: { flex: 1 },
-  search: {
-    borderWidth: 1,
-    borderColor: '#d0d0d0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  clearSearchButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f0f0f0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  clearSearchButtonText: { color: '#666', fontWeight: '600' },
-  filterRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 12,
-    gap: 8,
-    marginBottom: 8,
-    alignItems: 'center',
-  },
-  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: '#f0f0f0' },
-  chipActive: { backgroundColor: '#1a73e8' },
-  chipText: { color: '#333', fontSize: 12 },
-  chipTextActive: { color: '#fff' },
-  clearFiltersButton: { paddingHorizontal: 4, paddingVertical: 6 },
-  clearFiltersText: { color: '#c0392b', fontSize: 12, fontWeight: '600' },
-  listContent: { padding: 12 },
-  columnWrapper: { gap: 12, marginBottom: 12 },
+  container: { flex: 1, backgroundColor: colors.background },
+  header: { paddingHorizontal: screenPadding, paddingTop: spacing.md },
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.smd, alignItems: 'center' },
+  clearFiltersButton: { paddingHorizontal: spacing.xs, paddingVertical: spacing.sm },
+  clearFiltersText: { color: colors.danger, fontSize: 12, fontWeight: '600' },
+  listPadding: { paddingHorizontal: screenPadding },
+  listContent: { padding: screenPadding },
+  columnWrapper: { gap: spacing.smd, marginBottom: spacing.smd },
   gridCard: { flex: 1, width: undefined },
-  footerLoading: { marginVertical: 16 },
-  error: { color: '#c0392b', textAlign: 'center', marginTop: 24 },
 });

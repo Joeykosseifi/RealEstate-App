@@ -43,22 +43,22 @@ export function ReasonDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-md space-y-3 rounded-lg bg-white p-5">
-        <h2 className="text-lg font-semibold">{title}</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-deep-navy)]/50">
+      <div className="w-full max-w-md space-y-3 rounded-xl bg-surface p-5 shadow-lg">
+        <h2 className="text-lg font-semibold text-deep-navy">{title}</h2>
         <textarea
-          className="w-full rounded border px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-navy focus:outline-none"
           rows={4}
           placeholder="Reason (required)"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
         />
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-[var(--color-status-sold-fg)]">{error}</p>}
         <div className="flex justify-end gap-2">
           <button
             type="button"
             onClick={onCancel}
-            className="rounded px-3 py-2 text-sm text-gray-600 hover:bg-gray-100"
+            className="rounded-lg px-3 py-2 text-sm text-text-secondary hover:bg-[var(--color-app-bg)]"
           >
             Cancel
           </button>
@@ -66,7 +66,7 @@ export function ReasonDialog({
             type="button"
             onClick={onSubmit}
             disabled={submitting || !valid}
-            className="rounded bg-red-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-lg bg-[var(--color-status-sold-fg)] px-3 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
           >
             {submitting ? 'Submitting…' : actionLabel}
           </button>

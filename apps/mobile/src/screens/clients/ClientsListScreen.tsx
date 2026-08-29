@@ -1,19 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../auth/AuthContext';
 import { listClients } from '../../api/clients';
 import type { ClientListItem, ClientRecordStatus } from '../../api/types';
 import type { ClientsStackParamList } from '../../navigation/ClientsStack';
+import { Card, EmptyState, ErrorState, FilterChip, SearchInput, SkeletonList } from '../../components/ui';
+import { colors, screenPadding, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<ClientsStackParamList, 'ClientsList'>;
 
@@ -31,27 +24,25 @@ const STATUS_FILTERS: { label: string; value: ClientRecordStatus | undefined }[]
 function ClientRow({ item, onPress }: { item: ClientListItem; onPress: () => void }) {
   const archived = item.status === 'ARCHIVED';
   return (
-    <TouchableOpacity style={[styles.row, archived && styles.rowArchived]} onPress={onPress}>
-      <View style={styles.rowContent}>
-        <Text style={styles.rowTitle}>
-          {item.firstName} {item.lastName}
+    <Card onPress={onPress} style={[styles.row, archived && styles.rowArchived]}>
+      <Text style={typography.h3}>
+        {item.firstName} {item.lastName}
+      </Text>
+      <Text style={typography.bodySmall}>
+        {item.status}
+        {item.source ? ` · ${item.source}` : ''}
+      </Text>
+      <Text style={typography.body}>{item.phone}</Text>
+      {item.activeRequirementCount > 0 ? (
+        <Text style={styles.rowRequirements}>
+          {item.activeRequirementCount} active requirement{item.activeRequirementCount === 1 ? '' : 's'}
         </Text>
-        <Text style={styles.rowSubtitle}>
-          {item.status}
-          {item.source ? ` · ${item.source}` : ''}
-        </Text>
-        <Text style={styles.rowContact}>{item.phone}</Text>
-        {item.activeRequirementCount > 0 ? (
-          <Text style={styles.rowRequirements}>
-            {item.activeRequirementCount} active requirement
-            {item.activeRequirementCount === 1 ? '' : 's'}
-          </Text>
-        ) : null}
-      </View>
-    </TouchableOpacity>
+      ) : null}
+    </Card>
   );
 }
 
+/** Client roster — restyled Milestone 7, same search/filter/pagination logic as Properties. */
 export function ClientsListScreen({ navigation }: Props): React.JSX.Element {
   const { currentWorkspace, permissions } = useAuth();
   const [items, setItems] = useState<ClientListItem[]>([]);
@@ -110,8 +101,8 @@ export function ClientsListScreen({ navigation }: Props): React.JSX.Element {
 
   if (!currentWorkspace) {
     return (
-      <View style={styles.center}>
-        <Text>No workspace available.</Text>
+      <View style={styles.container}>
+        <ErrorState message="No workspace available." />
       </View>
     );
   }
@@ -119,100 +110,58 @@ export function ClientsListScreen({ navigation }: Props): React.JSX.Element {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <View style={styles.searchWrapper}>
-          <TextInput
-            style={styles.search}
-            placeholder="Search name, phone, email..."
-            value={search}
-            onChangeText={setSearch}
-            onSubmitEditing={() => void load(1, 'initial')}
-          />
-          {search !== '' && (
-            <TouchableOpacity
-              style={styles.clearSearchButton}
-              onPress={() => setSearch('')}
-              accessibilityLabel="Clear search"
-            >
-              <Text style={styles.clearSearchButtonText}>✕</Text>
-            </TouchableOpacity>
+        <SearchInput value={search} onChangeText={setSearch} placeholder="Search name, phone, email..." />
+
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={STATUS_FILTERS}
+          keyExtractor={(filter) => filter.label}
+          style={styles.chipsRow}
+          renderItem={({ item: filter }) => (
+            <FilterChip label={filter.label} selected={statusFilter === filter.value} onPress={() => setStatusFilter(filter.value)} />
           )}
-        </View>
-        {permissions.has('client.create') ? (
+        />
+        {hasActiveFilters ? (
           <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => navigation.navigate('AddClient')}
+            onPress={() => {
+              setSearch('');
+              setStatusFilter(undefined);
+            }}
+            style={styles.clearRow}
           >
-            <Text style={styles.addButtonText}>+ Add</Text>
+            <Text style={styles.clearText}>Clear filters</Text>
           </TouchableOpacity>
         ) : null}
       </View>
 
-      <FlatList
-        horizontal
-        style={styles.filters}
-        showsHorizontalScrollIndicator={false}
-        data={STATUS_FILTERS}
-        keyExtractor={(filter) => filter.label}
-        renderItem={({ item: filter }) => (
-          <TouchableOpacity
-            style={[styles.chip, statusFilter === filter.value && styles.chipActive]}
-            onPress={() => setStatusFilter(filter.value)}
-          >
-            <Text style={[styles.chipText, statusFilter === filter.value && styles.chipTextActive]}>
-              {filter.label}
-            </Text>
-          </TouchableOpacity>
-        )}
-        ListFooterComponent={
-          hasActiveFilters ? (
-            <TouchableOpacity
-              style={styles.clearFiltersButton}
-              onPress={() => {
-                setSearch('');
-                setStatusFilter(undefined);
-              }}
-            >
-              <Text style={styles.clearFiltersText}>Clear filters</Text>
-            </TouchableOpacity>
-          ) : null
-        }
-      />
-
       {loading ? (
-        <ActivityIndicator style={styles.center} />
-      ) : error ? (
-        <View style={styles.center}>
-          <Text style={styles.error}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => void load(1, 'initial')}>
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </TouchableOpacity>
+        <View style={styles.listPadding}>
+          <SkeletonList />
         </View>
+      ) : error ? (
+        <ErrorState message={error} onRetry={() => void load(1, 'initial')} />
       ) : (
         <FlatList
           data={items}
           keyExtractor={(item) => item.id}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => void load(1, 'refresh')} />
-          }
+          contentContainerStyle={styles.listContent}
+          refreshing={refreshing}
+          onRefresh={() => void load(1, 'refresh')}
           onEndReachedThreshold={0.4}
           onEndReached={onEndReached}
           renderItem={({ item }) => (
-            <ClientRow
-              item={item}
-              onPress={() => navigation.navigate('ClientDetail', { clientId: item.id })}
-            />
+            <ClientRow item={item} onPress={() => navigation.navigate('ClientDetail', { clientId: item.id })} />
           )}
-          ListFooterComponent={
-            loadingMore ? <ActivityIndicator style={styles.footerLoading} /> : null
-          }
+          ListFooterComponent={loadingMore ? <SkeletonList count={1} /> : null}
           ListEmptyComponent={
-            <View style={styles.center}>
-              <Text>
-                {hasActiveFilters
-                  ? 'No clients match your search.'
-                  : 'No clients yet — add your first one.'}
-              </Text>
-            </View>
+            <EmptyState
+              icon="👤"
+              title={hasActiveFilters ? 'No clients match your filters.' : 'No clients yet.'}
+              message={hasActiveFilters ? undefined : 'Add your first client to start tracking requirements and matches.'}
+              actionLabel={!hasActiveFilters && permissions.has('client.create') ? 'Add Client' : undefined}
+              onAction={!hasActiveFilters && permissions.has('client.create') ? () => navigation.navigate('AddClient') : undefined}
+            />
           }
         />
       )}
@@ -221,62 +170,14 @@ export function ClientsListScreen({ navigation }: Props): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  header: { flexDirection: 'row', padding: 12, gap: 8 },
-  searchWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  search: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#d0d0d0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  clearSearchButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f0f0f0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  clearSearchButtonText: { color: '#666', fontWeight: '600' },
-  addButton: {
-    backgroundColor: '#1a73e8',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    justifyContent: 'center',
-  },
-  addButtonText: { color: '#fff', fontWeight: '600' },
-  filters: { paddingHorizontal: 12, marginBottom: 4, flexGrow: 0 },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#f0f0f0',
-    marginRight: 8,
-  },
-  chipActive: { backgroundColor: '#1a73e8' },
-  chipText: { color: '#333' },
-  chipTextActive: { color: '#fff' },
-  clearFiltersButton: { justifyContent: 'center', paddingHorizontal: 4 },
-  clearFiltersText: { color: '#c0392b', fontSize: 12, fontWeight: '600' },
-  row: { padding: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e0e0e0' },
-  rowArchived: { opacity: 0.6, backgroundColor: '#fafafa' },
-  rowContent: { gap: 2 },
-  rowTitle: { fontSize: 16, fontWeight: '600' },
-  rowSubtitle: { color: '#666', fontSize: 13 },
-  rowContact: { color: '#333', fontSize: 14, marginTop: 2 },
-  rowRequirements: { color: '#1a73e8', fontSize: 12, marginTop: 2 },
-  error: { color: '#c0392b', textAlign: 'center' },
-  retryButton: {
-    marginTop: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: '#eef4ff',
-  },
-  retryButtonText: { color: '#1a73e8', fontWeight: '600' },
-  footerLoading: { marginVertical: 16 },
+  container: { flex: 1, backgroundColor: colors.background },
+  header: { paddingHorizontal: screenPadding, paddingTop: spacing.md },
+  chipsRow: { flexGrow: 0, marginTop: spacing.smd, marginBottom: spacing.xs },
+  clearRow: { marginBottom: spacing.sm },
+  clearText: { color: colors.danger, fontSize: 12, fontWeight: '600' },
+  listPadding: { paddingHorizontal: screenPadding },
+  listContent: { paddingHorizontal: screenPadding, paddingBottom: 48 },
+  row: { marginBottom: spacing.smd },
+  rowArchived: { opacity: 0.6 },
+  rowRequirements: { color: colors.brand.primaryNavy, fontSize: 12, marginTop: spacing.xs, fontWeight: '600' },
 });

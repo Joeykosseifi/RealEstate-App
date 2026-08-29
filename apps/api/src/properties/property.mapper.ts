@@ -15,6 +15,7 @@ import type {
   PropertyOwnerDetail,
   PropertyPrivateDetail,
   PropertyProfessionalDetail,
+  PropertyPublicationStatus,
   PropertyPublicDetail,
 } from '@real-estate/types';
 import { PERMISSIONS } from '../authorization/permissions.catalog';
@@ -25,6 +26,7 @@ export type PropertyWithRelations = Property & {
   media: PropertyMedia[];
   owners: PropertyOwner[];
   privateDetails: PropertyPrivateDetails | null;
+  publication: { status: PropertyPublicationStatus } | null;
 };
 
 /**
@@ -37,6 +39,8 @@ export type PropertyWithRelations = Property & {
  */
 export type PropertyForList = Property & {
   location: Pick<PropertyLocation, 'city' | 'area'> | null;
+  /** `null` when the property has no publication row at all — i.e. private. */
+  publication: { status: PropertyPublicationStatus } | null;
   media: Pick<
     PropertyMedia,
     | 'id'
@@ -146,6 +150,7 @@ export function toPropertyListItem(
     city: property.location?.city ?? null,
     area: property.location?.area ?? null,
     primaryMedia: primaryMediaOf(property.media),
+    publicationStatus: property.publication?.status ?? null,
     createdAt: property.createdAt.toISOString(),
     updatedAt: property.updatedAt.toISOString(),
   };

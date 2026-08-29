@@ -1,18 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../auth/AuthContext';
 import { getProperty, updateProperty } from '../../api/properties';
 import { ApiError } from '../../api/client';
 import type { PropertiesStackParamList } from '../../navigation/PropertiesStack';
+import { AppScreen, Button, ErrorState, FilterChip, LoadingState, TextField } from '../../components/ui';
+import { colors, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<PropertiesStackParamList, 'EditProperty'>;
 
@@ -30,39 +24,6 @@ const PROPERTY_TYPES = [
   'OTHER',
 ];
 const LISTING_PURPOSES = ['SALE', 'RENT'];
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {children}
-    </View>
-  );
-}
-
-function ChipPicker({
-  options,
-  value,
-  onChange,
-}: {
-  options: string[];
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <View style={styles.chipRow}>
-      {options.map((option) => (
-        <TouchableOpacity
-          key={option}
-          style={[styles.chip, value === option && styles.chipActive]}
-          onPress={() => onChange(option)}
-        >
-          <Text style={[styles.chipText, value === option && styles.chipTextActive]}>{option}</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-}
 
 /**
  * Edits an existing property's core/owner/private fields (see
@@ -179,177 +140,78 @@ export function EditPropertyScreen({ route, navigation }: Props): React.JSX.Elem
     }
   };
 
-  if (loading) {
-    return <ActivityIndicator style={styles.center} />;
-  }
-  if (loadError) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.error}>{loadError}</Text>
-      </View>
-    );
-  }
+  if (loading) return <LoadingState />;
+  if (loadError) return <ErrorState message={loadError} onRetry={() => void load()} />;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Section title="Type & Purpose">
-        <ChipPicker options={PROPERTY_TYPES} value={propertyType} onChange={setPropertyType} />
-        <ChipPicker
-          options={LISTING_PURPOSES}
-          value={listingPurpose}
-          onChange={setListingPurpose}
-        />
-      </Section>
+    <AppScreen>
+      <Text style={typography.label}>Property Type</Text>
+      <View style={styles.chipRow}>
+        {PROPERTY_TYPES.map((option) => (
+          <FilterChip key={option} label={option} selected={propertyType === option} onPress={() => setPropertyType(option)} />
+        ))}
+      </View>
+      <Text style={typography.label}>Sale or Rent</Text>
+      <View style={styles.chipRow}>
+        {LISTING_PURPOSES.map((option) => (
+          <FilterChip key={option} label={option} selected={listingPurpose === option} onPress={() => setListingPurpose(option)} />
+        ))}
+      </View>
 
-      <Section title="Basic Information">
-        <TextInput style={styles.input} placeholder="Title" value={title} onChangeText={setTitle} />
-        <TextInput
-          style={[styles.input, styles.multiline]}
-          placeholder="Description"
-          value={description}
-          onChangeText={setDescription}
-          multiline
-        />
-      </Section>
+      <TextField label="Title" value={title} onChangeText={setTitle} />
+      <TextField label="Description" value={description} onChangeText={setDescription} multiline optional />
 
-      <Section title="Price">
-        <View style={styles.row}>
-          <TextInput
-            style={[styles.input, styles.flex1]}
-            placeholder="Price"
-            keyboardType="numeric"
-            value={price}
-            onChangeText={setPrice}
-          />
-          <TextInput
-            style={[styles.input, styles.currencyInput]}
-            placeholder="USD"
-            autoCapitalize="characters"
-            maxLength={3}
-            value={currency}
-            onChangeText={setCurrency}
-          />
+      <View style={styles.row}>
+        <View style={styles.flex1}>
+          <TextField label="Price" value={price} onChangeText={setPrice} keyboardType="numeric" />
         </View>
-      </Section>
-
-      <Section title="Bedrooms / Bathrooms / Area">
-        <View style={styles.row}>
-          <TextInput
-            style={[styles.input, styles.flex1]}
-            placeholder="Bedrooms"
-            keyboardType="numeric"
-            value={bedrooms}
-            onChangeText={setBedrooms}
-          />
-          <TextInput
-            style={[styles.input, styles.flex1]}
-            placeholder="Bathrooms"
-            keyboardType="numeric"
-            value={bathrooms}
-            onChangeText={setBathrooms}
-          />
-          <TextInput
-            style={[styles.input, styles.flex1]}
-            placeholder="Area (sqm)"
-            keyboardType="numeric"
-            value={areaSqm}
-            onChangeText={setAreaSqm}
-          />
+        <View style={styles.currencyField}>
+          <TextField label="Currency" value={currency} onChangeText={setCurrency} autoCapitalize="characters" maxLength={3} />
         </View>
-      </Section>
+      </View>
+      <View style={styles.row}>
+        <View style={styles.flex1}>
+          <TextField label="Bedrooms" value={bedrooms} onChangeText={setBedrooms} keyboardType="numeric" optional />
+        </View>
+        <View style={styles.flex1}>
+          <TextField label="Bathrooms" value={bathrooms} onChangeText={setBathrooms} keyboardType="numeric" optional />
+        </View>
+        <View style={styles.flex1}>
+          <TextField label="Area (m²)" value={areaSqm} onChangeText={setAreaSqm} keyboardType="numeric" optional />
+        </View>
+      </View>
 
       {hasOwnerSection && (
-        <Section title="Owner Information">
-          <TextInput
-            style={styles.input}
-            placeholder="Owner full name"
-            value={ownerName}
-            onChangeText={setOwnerName}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Owner phone"
-            value={ownerPhone}
-            onChangeText={setOwnerPhone}
-          />
-        </Section>
+        <>
+          <Text style={typography.label}>Owner Information</Text>
+          <TextField label="Owner name" value={ownerName} onChangeText={setOwnerName} optional />
+          <TextField label="Owner phone" value={ownerPhone} onChangeText={setOwnerPhone} keyboardType="phone-pad" optional />
+        </>
       )}
 
       {hasPrivateSection && (
-        <Section title="Private Notes">
-          <TextInput
-            style={[styles.input, styles.multiline]}
-            placeholder="Internal notes (not shown to clients)"
-            value={internalNotes}
-            onChangeText={setInternalNotes}
-            multiline
-          />
+        <>
+          <Text style={styles.lockLabel}>🔒 Private Notes</Text>
+          <TextField label="Internal notes" value={internalNotes} onChangeText={setInternalNotes} multiline optional />
           {permissions.has('property.view_commission') && (
-            <TextInput
-              style={[styles.input, styles.multiline]}
-              placeholder="Commission notes"
-              value={commissionNotes}
-              onChangeText={setCommissionNotes}
-              multiline
-            />
+            <TextField label="Commission notes" value={commissionNotes} onChangeText={setCommissionNotes} multiline optional />
           )}
-        </Section>
+        </>
       )}
 
       {submitError ? <Text style={styles.error}>{submitError}</Text> : null}
 
-      <TouchableOpacity
-        style={[styles.submitButton, submitting && styles.buttonDisabled]}
-        onPress={() => void onSubmit()}
-        disabled={submitting}
-      >
-        {submitting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.submitButtonText}>Save Changes</Text>
-        )}
-      </TouchableOpacity>
-    </ScrollView>
+      <Button label="Save Changes" onPress={() => void onSubmit()} loading={submitting} style={styles.submitButton} />
+    </AppScreen>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  content: { padding: 16, paddingBottom: 48 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  section: { marginBottom: 20 },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#555',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#d0d0d0',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    fontSize: 16,
-  },
-  multiline: { minHeight: 80, textAlignVertical: 'top' },
-  row: { flexDirection: 'row', gap: 8 },
+const styles = {
+  chipRow: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, marginBottom: spacing.md },
+  row: { flexDirection: 'row' as const, gap: spacing.sm },
   flex1: { flex: 1 },
-  currencyInput: { width: 80 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
-  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: '#f0f0f0' },
-  chipActive: { backgroundColor: '#1a73e8' },
-  chipText: { color: '#333', fontSize: 13 },
-  chipTextActive: { color: '#fff' },
-  submitButton: {
-    backgroundColor: '#1a73e8',
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  submitButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  error: { color: '#c0392b', marginBottom: 12, textAlign: 'center' },
-});
+  currencyField: { width: 96 },
+  lockLabel: { fontWeight: '700' as const, color: colors.text.primary, marginBottom: spacing.sm, marginTop: spacing.xs },
+  error: { color: colors.danger, marginBottom: spacing.sm, textAlign: 'center' as const },
+  submitButton: { marginTop: spacing.md },
+};

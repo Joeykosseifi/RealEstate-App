@@ -1,61 +1,55 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../auth/AuthContext';
-import { listProperties } from '../../api/properties';
+import { listProperties, type PublicationFilter } from '../../api/properties';
 import type { PropertyBusinessStatus, PropertyListItem } from '../../api/types';
 import type { PropertiesStackParamList } from '../../navigation/PropertiesStack';
+import {
+  ActionSheet,
+  EmptyState,
+  ErrorState,
+  FilterChip,
+  PropertyCard,
+  SearchInput,
+  SkeletonList,
+} from '../../components/ui';
+import { colors, screenPadding, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<PropertiesStackParamList, 'PropertiesList'>;
 
-const STATUS_FILTERS: { label: string; value: PropertyBusinessStatus | undefined }[] = [
+const PRIMARY_FILTERS: { label: string; value: PublicationFilter | undefined }[] = [
   { label: 'All', value: undefined },
+  { label: 'Private', value: 'PRIVATE' },
+  { label: 'Published', value: 'PUBLISHED' },
+  { label: 'Pending', value: 'PENDING_REVIEW' },
+];
+
+const BUSINESS_STATUS_OPTIONS: { label: string; value: PropertyBusinessStatus | undefined }[] = [
+  { label: 'All business statuses', value: undefined },
   { label: 'Available', value: 'AVAILABLE' },
   { label: 'Reserved', value: 'RESERVED' },
   { label: 'Sold', value: 'SOLD' },
   { label: 'Rented', value: 'RENTED' },
   { label: 'Off Market', value: 'OFF_MARKET' },
-  { label: 'Archived', value: 'ARCHIVED' },
 ];
 
-const PAGE_SIZE = 20;
-
-function PropertyRow({ item, onPress }: { item: PropertyListItem; onPress: () => void }) {
-  const archived = item.propertyStatus === 'ARCHIVED';
-  return (
-    <TouchableOpacity style={[styles.row, archived && styles.rowArchived]} onPress={onPress}>
-      <View style={styles.rowContent}>
-        <Text style={styles.rowTitle}>{item.title}</Text>
-        <Text style={styles.rowSubtitle}>
-          {item.propertyType} · {item.listingPurpose} · {item.propertyStatus}
-        </Text>
-        <Text style={styles.rowPrice}>
-          {item.currency} {item.price.toLocaleString()}
-        </Text>
-        {item.city ? (
-          <Text style={styles.rowLocation}>
-            {[item.city, item.area].filter(Boolean).join(', ')}
-          </Text>
-        ) : null}
-      </View>
-    </TouchableOpacity>
-  );
-}
-
+/**
+ * The private property database (Milestone 7 spec §14 — a "CRITICAL
+ * SCREEN"). Primary filter chips are publication lifecycle (All/
+ * Private/Published/Pending), matching what an agent actually scans
+ * for; business status and Archived move to a secondary "Filters"
+ * sheet so the main view stays uncluttered. See docs/PRODUCT.md
+ * "Properties database".
+ */
 export function PropertiesListScreen({ navigation }: Props): React.JSX.Element {
   const { currentWorkspace, permissions } = useAuth();
   const [items, setItems] = useState<PropertyListItem[]>([]);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<PropertyBusinessStatus | undefined>(undefined);
+  const [publicationFilter, setPublicationFilter] = useState<PublicationFilter | undefined>(undefined);
+  const [businessStatus, setBusinessStatus] = useState<PropertyBusinessStatus | undefined>(undefined);
+  const [archivedOnly, setArchivedOnly] = useState(false);
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -74,7 +68,9 @@ export function PropertiesListScreen({ navigation }: Props): React.JSX.Element {
         const response = await listProperties(currentWorkspace.id, {
           page: nextPage,
           search: search || undefined,
-          propertyStatus: statusFilter,
+          publicationFilter,
+          propertyStatus: archivedOnly ? 'ARCHIVED' : businessStatus,
+          includeArchived: archivedOnly,
         });
         setItems((current) => (mode === 'more' ? [...current, ...response.items] : response.items));
         setPage(nextPage);
@@ -87,7 +83,7 @@ export function PropertiesListScreen({ navigation }: Props): React.JSX.Element {
         setLoadingMore(false);
       }
     },
-    [currentWorkspace, search, statusFilter],
+    [currentWorkspace, search, publicationFilter, businessStatus, archivedOnly],
   );
 
   useEffect(() => {
@@ -105,12 +101,20 @@ export function PropertiesListScreen({ navigation }: Props): React.JSX.Element {
     }
   };
 
-  const hasActiveFilters = search !== '' || statusFilter !== undefined;
+  const hasActiveFilters =
+    search !== '' || publicationFilter !== undefined || businessStatus !== undefined || archivedOnly;
+
+  const clearFilters = () => {
+    setSearch('');
+    setPublicationFilter(undefined);
+    setBusinessStatus(undefined);
+    setArchivedOnly(false);
+  };
 
   if (!currentWorkspace) {
     return (
-      <View style={styles.center}>
-        <Text>No workspace available.</Text>
+      <View style={styles.container}>
+        <ErrorState message="No workspace available." />
       </View>
     );
   }
@@ -118,164 +122,129 @@ export function PropertiesListScreen({ navigation }: Props): React.JSX.Element {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <View style={styles.searchWrapper}>
-          <TextInput
-            style={styles.search}
-            placeholder="Search title, city, area..."
-            value={search}
-            onChangeText={setSearch}
-            onSubmitEditing={() => void load(1, 'initial')}
-          />
-          {search !== '' && (
-            <TouchableOpacity
-              style={styles.clearSearchButton}
-              onPress={() => setSearch('')}
-              accessibilityLabel="Clear search"
-            >
-              <Text style={styles.clearSearchButtonText}>✕</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        {permissions.has('property.create') && (
+        <View style={styles.searchRow}>
+          <View style={styles.searchInput}>
+            <SearchInput value={search} onChangeText={setSearch} placeholder="Search title, city, area..." />
+          </View>
           <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => navigation.navigate('AddProperty')}
+            style={styles.filterButton}
+            onPress={() => setFilterSheetOpen(true)}
+            accessibilityLabel="Advanced filters"
           >
-            <Text style={styles.addButtonText}>+ Add</Text>
+            <Text style={styles.filterButtonText}>Filters{archivedOnly || businessStatus ? ' •' : ''}</Text>
           </TouchableOpacity>
-        )}
+        </View>
+
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={PRIMARY_FILTERS}
+          keyExtractor={(filter) => filter.label}
+          style={styles.chipsRow}
+          renderItem={({ item: filter }) => (
+            <FilterChip
+              label={filter.label}
+              selected={publicationFilter === filter.value && !archivedOnly}
+              onPress={() => {
+                setPublicationFilter(filter.value);
+                setArchivedOnly(false);
+              }}
+            />
+          )}
+        />
+
+        {hasActiveFilters ? (
+          <TouchableOpacity onPress={clearFilters} style={styles.clearRow}>
+            <Text style={styles.clearText}>Clear filters</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
-      <FlatList
-        horizontal
-        style={styles.filters}
-        showsHorizontalScrollIndicator={false}
-        data={STATUS_FILTERS}
-        keyExtractor={(filter) => filter.label}
-        renderItem={({ item: filter }) => (
-          <TouchableOpacity
-            style={[styles.chip, statusFilter === filter.value && styles.chipActive]}
-            onPress={() => setStatusFilter(filter.value)}
-          >
-            <Text style={[styles.chipText, statusFilter === filter.value && styles.chipTextActive]}>
-              {filter.label}
-            </Text>
-          </TouchableOpacity>
-        )}
-        ListFooterComponent={
-          hasActiveFilters ? (
-            <TouchableOpacity
-              style={styles.clearFiltersButton}
-              onPress={() => {
-                setSearch('');
-                setStatusFilter(undefined);
-              }}
-            >
-              <Text style={styles.clearFiltersText}>Clear filters</Text>
-            </TouchableOpacity>
-          ) : null
-        }
-      />
-
       {loading ? (
-        <ActivityIndicator style={styles.center} />
-      ) : error ? (
-        <View style={styles.center}>
-          <Text style={styles.error}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => void load(1, 'initial')}>
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </TouchableOpacity>
+        <View style={styles.listPadding}>
+          <SkeletonList />
         </View>
+      ) : error ? (
+        <ErrorState message={error} onRetry={() => void load(1, 'initial')} />
       ) : (
         <FlatList
           data={items}
           keyExtractor={(item) => item.id}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => void load(1, 'refresh')} />
-          }
+          contentContainerStyle={styles.listContent}
+          refreshing={refreshing}
+          onRefresh={() => void load(1, 'refresh')}
           onEndReachedThreshold={0.4}
           onEndReached={onEndReached}
           renderItem={({ item }) => (
-            <PropertyRow
-              item={item}
+            <PropertyCard
+              property={item}
+              publicationStatus={item.publicationStatus}
+              imageUrl={null}
               onPress={() => navigation.navigate('PropertyDetail', { propertyId: item.id })}
             />
           )}
-          ListFooterComponent={
-            loadingMore ? <ActivityIndicator style={styles.footerLoading} /> : null
-          }
+          ListFooterComponent={loadingMore ? <SkeletonList count={1} /> : null}
           ListEmptyComponent={
-            <View style={styles.center}>
-              <Text>
-                {hasActiveFilters
-                  ? 'No properties match your search.'
-                  : 'No properties yet — add your first one.'}
-              </Text>
-            </View>
+            <EmptyState
+              icon="🏠"
+              title={hasActiveFilters ? 'No properties match your filters.' : 'Your property database is empty.'}
+              message={hasActiveFilters ? undefined : 'Add your first property to get started.'}
+              actionLabel={
+                !hasActiveFilters && permissions.has('property.create') ? 'Add Property' : undefined
+              }
+              onAction={
+                !hasActiveFilters && permissions.has('property.create')
+                  ? () => navigation.navigate('AddProperty')
+                  : undefined
+              }
+            />
           }
         />
       )}
+
+      <ActionSheet
+        visible={filterSheetOpen}
+        title="Business status"
+        onClose={() => setFilterSheetOpen(false)}
+        items={[
+          ...BUSINESS_STATUS_OPTIONS.map((option) => ({
+            label: option.label,
+            onPress: () => {
+              setBusinessStatus(option.value);
+              setArchivedOnly(false);
+            },
+          })),
+          {
+            label: 'Archived properties',
+            onPress: () => {
+              setArchivedOnly(true);
+              setPublicationFilter(undefined);
+              setBusinessStatus(undefined);
+            },
+          },
+        ]}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  header: { flexDirection: 'row', padding: 12, gap: 8 },
-  searchWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  search: {
-    flex: 1,
+  container: { flex: 1, backgroundColor: colors.background },
+  header: { paddingHorizontal: screenPadding, paddingTop: spacing.md },
+  searchRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.smd },
+  searchInput: { flex: 1 },
+  filterButton: {
+    justifyContent: 'center',
+    paddingHorizontal: spacing.smd,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#d0d0d0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
-  clearSearchButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f0f0f0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  clearSearchButtonText: { color: '#666', fontWeight: '600' },
-  addButton: {
-    backgroundColor: '#1a73e8',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    justifyContent: 'center',
-  },
-  addButtonText: { color: '#fff', fontWeight: '600' },
-  filters: { paddingHorizontal: 12, marginBottom: 4, flexGrow: 0 },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#f0f0f0',
-    marginRight: 8,
-  },
-  chipActive: { backgroundColor: '#1a73e8' },
-  chipText: { color: '#333' },
-  chipTextActive: { color: '#fff' },
-  clearFiltersButton: { justifyContent: 'center', paddingHorizontal: 4 },
-  clearFiltersText: { color: '#c0392b', fontSize: 12, fontWeight: '600' },
-  row: { padding: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e0e0e0' },
-  rowArchived: { opacity: 0.6, backgroundColor: '#fafafa' },
-  rowContent: { gap: 2 },
-  rowTitle: { fontSize: 16, fontWeight: '600' },
-  rowSubtitle: { color: '#666', fontSize: 13 },
-  rowPrice: { fontSize: 15, fontWeight: '500', marginTop: 2 },
-  rowLocation: { color: '#888', fontSize: 13 },
-  error: { color: '#c0392b', textAlign: 'center' },
-  retryButton: {
-    marginTop: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: '#eef4ff',
-  },
-  retryButtonText: { color: '#1a73e8', fontWeight: '600' },
-  footerLoading: { marginVertical: 16 },
+  filterButtonText: { color: colors.brand.primaryNavy, fontWeight: '600', fontSize: 13 },
+  chipsRow: { flexGrow: 0, marginBottom: spacing.xs },
+  clearRow: { marginBottom: spacing.sm },
+  clearText: { color: colors.danger, fontSize: 12, fontWeight: '600' },
+  listPadding: { paddingHorizontal: screenPadding },
+  listContent: { paddingHorizontal: screenPadding, paddingBottom: 48 },
 });
