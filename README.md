@@ -100,6 +100,26 @@ integration tests, and `tests/README.md` for the cross-cutting
 security-test checklist that grows as later milestones add the
 workspaces/properties those tests need.
 
+The admin-web moderation UI has its own committed, repeatable Playwright
+regression suite (16 scenarios: login/session handling, the review
+queue's rendering/filtering/pagination, the review detail's safe
+snapshot, approve/reject/request-changes with reason validation,
+admin-unpublish/restore, and a structural check that private
+professional/owner fields never reach the moderation view). It seeds
+real fixtures through the actual registration/publication HTTP flow
+(never mocked) and needs Postgres + Redis running:
+
+```bash
+cd apps/admin-web
+npm run test:admin-web
+```
+
+This one script boots the API (dev mode) and admin-web, seeds fixtures,
+runs the suite, and tears both servers down — see
+`apps/admin-web/tests/run-admin-web-tests.mjs` for details, including
+why it flushes Redis first (the suite drives real traffic through the
+real login/registration rate limiters, never a weakened stand-in).
+
 ## Build order (milestones)
 
 The platform is built one milestone at a time; each is fully tested,

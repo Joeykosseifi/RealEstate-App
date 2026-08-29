@@ -28,6 +28,13 @@ prisma/generated/
 
 # Logs
 npm-debug.log*
+
+# admin-web Playwright regression suite — runtime artifacts, never fixtures/config
+apps/admin-web/tests/.fixtures.json
+apps/admin-web/tests/.storage-state.json
+apps/admin-web/tests/.logs/
+apps/admin-web/playwright-report/
+apps/admin-web/test-results/
 yarn-debug.log*
 yarn-error.log*
 *.log

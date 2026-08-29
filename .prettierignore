@@ -8,3 +8,7 @@ coverage
 package-lock.json
 prisma/generated
 *.md
+apps/admin-web/test-results
+apps/admin-web/playwright-report
+apps/admin-web/tests/.fixtures.json
+apps/admin-web/tests/.storage-state.json
