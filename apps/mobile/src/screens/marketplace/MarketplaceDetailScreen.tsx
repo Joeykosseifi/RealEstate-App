@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { addFavorite, getMarketplaceListing, removeFavorite } from '../../api/marketplace';
 import { ApiError } from '../../api/client';
 import type { PublicPropertyDetail } from '../../api/types';
 import type { MarketplaceDetailParamList } from '../../navigation/client/marketplaceDetailParams';
-import { Button, ErrorState, IconButton, LoadingState } from '../../components/ui';
+import { Button, ContactActions, ErrorState, IconButton, LoadingState } from '../../components/ui';
 import { colors, priceText, radii, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<MarketplaceDetailParamList, 'MarketplaceDetail'>;
@@ -71,31 +71,12 @@ export function MarketplaceDetailScreen({ route }: Props): React.JSX.Element {
 
   /**
    * V1 deliberately has no in-app messaging (see docs/PRODUCT.md
-   * "Contact-professional flow") — these are real `tel:`/`mailto:`/
-   * `wa.me` deep links into the device's own phone/mail/WhatsApp apps,
-   * using only the workspace's explicit, opt-in public contact info
-   * (never the private owner's contact — see PublicListingIdentity).
+   * "Contact-professional flow") — `ContactActions` renders real
+   * `tel:`/`mailto:`/`wa.me` deep links into the device's own phone/
+   * mail/WhatsApp apps, using only the workspace's explicit, opt-in
+   * public contact info (never the private owner's contact — see
+   * PublicListingIdentity).
    */
-  const openLink = async (url: string) => {
-    try {
-      await Linking.openURL(url);
-    } catch {
-      Alert.alert('Could not open', 'Please try again.');
-    }
-  };
-
-  const onCall = () => {
-    if (listing?.identity.contactPhone) void openLink(`tel:${listing.identity.contactPhone}`);
-  };
-  const onEmail = () => {
-    if (listing?.identity.contactEmail) void openLink(`mailto:${listing.identity.contactEmail}`);
-  };
-  const onWhatsApp = () => {
-    if (!listing?.identity.contactWhatsapp) return;
-    const digits = listing.identity.contactWhatsapp.replace(/[^\d]/g, '');
-    void openLink(`https://wa.me/${digits}`);
-  };
-
   const onNoContactFallback = () => {
     Alert.alert(
       "I'm Interested",
@@ -195,10 +176,12 @@ export function MarketplaceDetailScreen({ route }: Props): React.JSX.Element {
       <View style={styles.section}>
         <Text style={typography.label}>Contact</Text>
         {listing.identity.contactPhone || listing.identity.contactWhatsapp || listing.identity.contactEmail ? (
-          <View style={styles.contactRow}>
-            {listing.identity.contactPhone && <Button label="Call" onPress={onCall} style={styles.contactButton} />}
-            {listing.identity.contactWhatsapp && <Button label="WhatsApp" onPress={onWhatsApp} style={styles.contactButton} />}
-            {listing.identity.contactEmail && <Button label="Email" onPress={onEmail} style={styles.contactButton} />}
+          <View style={styles.spacedTop}>
+            <ContactActions
+              phone={listing.identity.contactPhone ?? null}
+              whatsapp={listing.identity.contactWhatsapp ?? null}
+              email={listing.identity.contactEmail ?? null}
+            />
           </View>
         ) : (
           <Button label="I'm Interested" onPress={onNoContactFallback} style={styles.spacedTop} />
@@ -229,6 +212,4 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: spacing.smd, paddingVertical: 6, borderRadius: radii.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   chipText: { color: colors.text.primary, fontSize: 13 },
   spacedTop: { marginTop: spacing.sm },
-  contactRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
-  contactButton: { flex: 1 },
 });

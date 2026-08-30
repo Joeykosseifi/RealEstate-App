@@ -11,7 +11,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { ApiError } from '../../api/client';
 import type { AuthStackParamList } from '../../navigation/AuthStack';
 import { AppScreen, Button, Card, TextField } from '../../components/ui';
-import { colors, spacing, typography } from '../../theme';
+import { colors, linkText, spacing, typography } from '../../theme';
 
 export interface VerificationFormProps {
   email: string;
@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   verifiedBadge: { color: colors.success, fontWeight: '700', fontSize: 13 },
   rowButtons: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, marginTop: spacing.xs },
-  linkText: { color: colors.brand.primaryNavy, fontWeight: '600', fontSize: 14 },
+  linkText: linkText,
   error: { color: colors.danger, fontSize: 13, marginBottom: spacing.xs },
   success: { color: colors.success, fontSize: 13, marginBottom: spacing.xs },
   continueButton: { marginTop: spacing.sm },

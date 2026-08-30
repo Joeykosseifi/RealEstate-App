@@ -5,7 +5,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { ApiError } from '../../api/client';
 import type { AuthStackParamList } from '../../navigation/AuthStack';
 import { AppScreen, Button, TextField } from '../../components/ui';
-import { colors, spacing, typography } from '../../theme';
+import { colors, linkText, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignIn'>;
 
@@ -45,6 +45,7 @@ export function SignInScreen({ navigation }: Props): React.JSX.Element {
   return (
     <AppScreen>
       <Text style={[typography.display, styles.title]}>Welcome back</Text>
+      <Text style={[typography.body, styles.subtitle]}>Sign in to your ProBase account</Text>
 
         <TextField
           label="Email"
@@ -91,10 +92,11 @@ export function SignInScreen({ navigation }: Props): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  title: { marginBottom: spacing.xl, marginTop: spacing.xl },
+  title: { marginTop: spacing.xl },
+  subtitle: { color: colors.text.secondary, marginTop: spacing.xs, marginBottom: spacing.xl },
   forgotLink: { alignSelf: 'flex-end', marginBottom: spacing.md },
-  forgotLinkText: { color: colors.brand.primaryNavy, fontSize: 13, fontWeight: '600' },
+  forgotLinkText: linkText,
   error: { color: colors.danger, marginBottom: spacing.smd, fontSize: 13 },
   createAccountLink: { marginTop: spacing.xl, alignItems: 'center' },
-  createAccountLinkBold: { color: colors.brand.primaryNavy, fontWeight: '700' },
+  createAccountLinkBold: { ...linkText, fontWeight: '700' },
 });

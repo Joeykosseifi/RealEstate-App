@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { registerAgent, registerClient, registerCompany } from '../../api/auth';
 import { ApiError } from '../../api/client';
 import type { AccountType } from '../../api/types';
@@ -15,10 +16,25 @@ import { colors, radii, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'CreateAccount'>;
 
-const ACCOUNT_TYPES: { value: AccountType; label: string; description: string }[] = [
-  { value: 'CLIENT', label: 'Client', description: 'Browse and save properties' },
-  { value: 'AGENT', label: 'Independent Agent', description: 'Your own private property database' },
-  { value: 'COMPANY', label: 'Real Estate Company', description: 'A shared team workspace' },
+const ACCOUNT_TYPES: {
+  value: AccountType;
+  label: string;
+  description: string;
+  icon: keyof typeof Ionicons.glyphMap;
+}[] = [
+  { value: 'CLIENT', label: 'Client', description: 'Find properties to buy or rent', icon: 'person-outline' },
+  {
+    value: 'AGENT',
+    label: 'Real Estate Agent',
+    description: 'Manage your own properties and clients',
+    icon: 'briefcase-outline',
+  },
+  {
+    value: 'COMPANY',
+    label: 'Real Estate Company',
+    description: 'Manage your company and team',
+    icon: 'business-outline',
+  },
 ];
 
 const initialValues: RegistrationFormValues = {
@@ -99,7 +115,8 @@ export function CreateAccountScreen({ navigation }: Props): React.JSX.Element {
 
   return (
     <AppScreen>
-      <Text style={typography.label}>I am a...</Text>
+      <Text style={[typography.display, styles.heading]}>Create your{'\n'}ProBase account</Text>
+      <Text style={typography.label}>Choose your account type</Text>
         <View style={styles.accountTypeRow}>
           {ACCOUNT_TYPES.map((option) => {
             const selected = values.accountType === option.value;
@@ -112,10 +129,22 @@ export function CreateAccountScreen({ navigation }: Props): React.JSX.Element {
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
               >
-                <Text style={[typography.h3, selected && styles.accountTypeLabelSelected]}>
-                  {option.label}
-                </Text>
-                <Text style={typography.caption}>{option.description}</Text>
+                <View style={[styles.accountTypeIcon, selected && styles.accountTypeIconSelected]}>
+                  <Ionicons
+                    name={option.icon}
+                    size={22}
+                    color={selected ? colors.brand.gold : colors.brand.primaryNavy}
+                  />
+                </View>
+                <View style={styles.accountTypeTextWrap}>
+                  <Text style={typography.h3}>{option.label}</Text>
+                  <Text style={typography.bodySmall}>{option.description}</Text>
+                </View>
+                {selected ? (
+                  <Ionicons name="checkmark-circle" size={22} color={colors.brand.gold} />
+                ) : (
+                  <View style={styles.accountTypeRadio} />
+                )}
               </TouchableOpacity>
             );
           })}
@@ -212,16 +241,36 @@ export function CreateAccountScreen({ navigation }: Props): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
+  heading: { marginTop: spacing.lg, marginBottom: spacing.lg },
   accountTypeRow: { gap: spacing.sm, marginTop: spacing.xs, marginBottom: spacing.lg },
   accountTypeOption: {
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.border,
     borderRadius: radii.card,
     padding: spacing.smd,
     backgroundColor: colors.surface,
+    gap: spacing.smd,
   },
-  accountTypeOptionSelected: { borderColor: colors.brand.primaryNavy, backgroundColor: colors.selectedTint },
-  accountTypeLabelSelected: { color: colors.brand.primaryNavy },
+  accountTypeOptionSelected: { borderColor: colors.brand.gold, backgroundColor: colors.selectedTint },
+  accountTypeIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.control,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accountTypeIconSelected: { backgroundColor: colors.brand.deepNavy },
+  accountTypeTextWrap: { flex: 1, gap: 2 },
+  accountTypeRadio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+  },
   termsRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.sm, gap: spacing.smd },
   checkbox: {
     width: 22,

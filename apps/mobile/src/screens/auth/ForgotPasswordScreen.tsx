@@ -6,7 +6,7 @@ import { ApiError } from '../../api/client';
 import { validatePassword, validatePasswordConfirmation } from '../../auth/validation';
 import type { AuthStackParamList } from '../../navigation/AuthStack';
 import { AppScreen, Button, TextField } from '../../components/ui';
-import { colors, spacing, typography } from '../../theme';
+import { colors, linkText, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
 
@@ -69,6 +69,7 @@ export function ForgotPasswordScreen({ navigation }: Props): React.JSX.Element {
 
   return (
     <AppScreen>
+      <Text style={[typography.display, styles.title]}>Reset password</Text>
       {step === 'request' ? (
           <>
             <Text style={[typography.body, styles.intro]}>
@@ -109,9 +110,10 @@ export function ForgotPasswordScreen({ navigation }: Props): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  intro: { color: colors.text.secondary, marginTop: spacing.xl, marginBottom: spacing.lg },
+  title: { marginTop: spacing.xl },
+  intro: { color: colors.text.secondary, marginTop: spacing.sm, marginBottom: spacing.lg },
   error: { color: colors.danger, marginBottom: spacing.smd },
   success: { color: colors.success, marginTop: spacing.xl, marginBottom: spacing.sm },
   footerLink: { marginTop: spacing.lg, alignItems: 'center' },
-  linkText: { color: colors.brand.primaryNavy, fontWeight: '600', fontSize: 14 },
+  linkText: linkText,
 });

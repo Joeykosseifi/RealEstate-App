@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../auth/AuthContext';
 import { listProperties, type PublicationFilter } from '../../api/properties';
 import type { PropertyBusinessStatus, PropertyListItem } from '../../api/types';
@@ -14,7 +15,7 @@ import {
   SearchInput,
   SkeletonList,
 } from '../../components/ui';
-import { colors, screenPadding, spacing, typography } from '../../theme';
+import { colors, radii, screenPadding, spacing } from '../../theme';
 
 type Props = NativeStackScreenProps<PropertiesStackParamList, 'PropertiesList'>;
 
@@ -129,9 +130,11 @@ export function PropertiesListScreen({ navigation }: Props): React.JSX.Element {
           <TouchableOpacity
             style={styles.filterButton}
             onPress={() => setFilterSheetOpen(true)}
+            accessibilityRole="button"
             accessibilityLabel="Advanced filters"
           >
-            <Text style={styles.filterButtonText}>Filters{archivedOnly || businessStatus ? ' •' : ''}</Text>
+            <Ionicons name="options-outline" size={20} color={colors.brand.primaryNavy} />
+            {archivedOnly || businessStatus ? <View style={styles.filterDot} /> : null}
           </TouchableOpacity>
         </View>
 
@@ -234,14 +237,24 @@ const styles = StyleSheet.create({
   searchRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.smd },
   searchInput: { flex: 1 },
   filterButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.smd,
-    borderRadius: 10,
+    borderRadius: radii.input,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  filterButtonText: { color: colors.brand.primaryNavy, fontWeight: '600', fontSize: 13 },
+  filterDot: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.brand.gold,
+  },
   chipsRow: { flexGrow: 0, marginBottom: spacing.xs },
   clearRow: { marginBottom: spacing.sm },
   clearText: { color: colors.danger, fontSize: 12, fontWeight: '600' },

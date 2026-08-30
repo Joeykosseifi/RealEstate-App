@@ -7,7 +7,12 @@ interface FilterChipProps {
   onPress: () => void;
 }
 
-/** A single filter pill — selected state uses navy, not gold (gold is reserved for the single highest-value CTA on a screen). */
+/**
+ * A single filter pill. Selected state uses gold — an explicitly
+ * sanctioned use of the accent color as an "active selection" indicator
+ * (see docs/DESIGN_SYSTEM.md "Gold usage": accent CTAs, selected states,
+ * active navigation — never a whole screen or body text).
+ */
 export function FilterChip({ label, selected, onPress }: FilterChipProps): React.JSX.Element {
   return (
     <TouchableOpacity
@@ -31,7 +36,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     marginRight: spacing.sm,
   },
-  chipSelected: { backgroundColor: colors.brand.primaryNavy, borderColor: colors.brand.primaryNavy },
+  chipSelected: { backgroundColor: colors.brand.gold, borderColor: colors.brand.gold },
   label: { fontSize: 13, fontWeight: '600', color: colors.text.secondary },
-  labelSelected: { color: colors.text.inverse },
+  labelSelected: { color: colors.text.onGold },
 });

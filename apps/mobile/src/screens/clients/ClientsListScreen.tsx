@@ -5,7 +5,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { listClients } from '../../api/clients';
 import type { ClientListItem, ClientRecordStatus } from '../../api/types';
 import type { ClientsStackParamList } from '../../navigation/ClientsStack';
-import { Card, EmptyState, ErrorState, FilterChip, SearchInput, SkeletonList } from '../../components/ui';
+import { Avatar, Card, EmptyState, ErrorState, FilterChip, SearchInput, SkeletonList } from '../../components/ui';
 import { colors, screenPadding, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<ClientsStackParamList, 'ClientsList'>;
@@ -25,19 +25,24 @@ function ClientRow({ item, onPress }: { item: ClientListItem; onPress: () => voi
   const archived = item.status === 'ARCHIVED';
   return (
     <Card onPress={onPress} style={[styles.row, archived && styles.rowArchived]}>
-      <Text style={typography.h3}>
-        {item.firstName} {item.lastName}
-      </Text>
-      <Text style={typography.bodySmall}>
-        {item.status}
-        {item.source ? ` · ${item.source}` : ''}
-      </Text>
-      <Text style={typography.body}>{item.phone}</Text>
-      {item.activeRequirementCount > 0 ? (
-        <Text style={styles.rowRequirements}>
-          {item.activeRequirementCount} active requirement{item.activeRequirementCount === 1 ? '' : 's'}
-        </Text>
-      ) : null}
+      <View style={styles.rowContent}>
+        <Avatar name={`${item.firstName} ${item.lastName}`} size={44} />
+        <View style={styles.rowText}>
+          <Text style={typography.h3}>
+            {item.firstName} {item.lastName}
+          </Text>
+          <Text style={typography.bodySmall}>
+            {item.status}
+            {item.source ? ` · ${item.source}` : ''}
+          </Text>
+          <Text style={typography.body}>{item.phone}</Text>
+          {item.activeRequirementCount > 0 ? (
+            <Text style={styles.rowRequirements}>
+              {item.activeRequirementCount} active requirement{item.activeRequirementCount === 1 ? '' : 's'}
+            </Text>
+          ) : null}
+        </View>
+      </View>
     </Card>
   );
 }
@@ -179,5 +184,7 @@ const styles = StyleSheet.create({
   listContent: { paddingHorizontal: screenPadding, paddingBottom: 48 },
   row: { marginBottom: spacing.smd },
   rowArchived: { opacity: 0.6 },
+  rowContent: { flexDirection: 'row', gap: spacing.smd },
+  rowText: { flex: 1, gap: 1 },
   rowRequirements: { color: colors.brand.primaryNavy, fontSize: 12, marginTop: spacing.xs, fontWeight: '600' },
 });

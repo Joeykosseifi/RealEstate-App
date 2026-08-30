@@ -1,10 +1,13 @@
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
+import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthContext';
 import { AuthStack } from './AuthStack';
 import { MainTabs } from './MainTabs';
 import { VerificationForm } from '../screens/auth/VerificationScreen';
 import { resolveRootRoute } from './resolveInitialRoute';
+import { colors, spacing } from '../theme';
 
 /**
  * Root of the navigation tree (Milestone 6.1). `resolveRootRoute` (a
@@ -21,8 +24,14 @@ export function RootNavigator(): React.JSX.Element {
 
   if (route === 'loading') {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator />
+      <View style={styles.loadingContainer}>
+        <StatusBar style="light" />
+        <View style={styles.loadingMark}>
+          <Ionicons name="business" size={32} color={colors.brand.gold} />
+        </View>
+        <Text style={styles.loadingTitle}>ProBase</Text>
+        <Text style={styles.loadingTagline}>Property. Organized.</Text>
+        <ActivityIndicator color={colors.brand.gold} style={styles.loadingSpinner} />
       </View>
     );
   }
@@ -46,3 +55,24 @@ export function RootNavigator(): React.JSX.Element {
     </NavigationContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand.deepNavy,
+  },
+  loadingMark: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  loadingTitle: { color: colors.text.inverse, fontSize: 26, fontWeight: '700' },
+  loadingTagline: { color: colors.brand.gold, fontSize: 14, fontWeight: '700', marginTop: 2 },
+  loadingSpinner: { marginTop: spacing.xl },
+});

@@ -24,6 +24,22 @@ export const typography: Record<
   caption: { fontSize: 12, fontWeight: '500', lineHeight: 16, color: colors.text.secondary },
 };
 
+/** The one "link-style text" treatment (small, semi-bold, navy) — use instead of redefining this per screen. */
+export const linkText: TypeToken = {
+  fontSize: 13,
+  fontWeight: '600',
+  lineHeight: 18,
+  color: colors.brand.primaryNavy,
+};
+
+/** Same weight/size as `linkText` but for a destructive action rendered as text (e.g. "Archive"). */
+export const dangerLinkText: TypeToken = {
+  fontSize: 13,
+  fontWeight: '600',
+  lineHeight: 18,
+  color: colors.danger,
+};
+
 /** Prices get their own token — prominent without becoming oversized. */
 export const priceText: TypeToken = {
   fontSize: 19,

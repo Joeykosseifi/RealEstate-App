@@ -9,7 +9,7 @@ import { ApiError } from '../../api/client';
 import { MapLocationPicker } from '../../location/MapLocationPicker';
 import { toLocationDto, type LocationDraft } from '../../location/locationPayload';
 import type { PropertiesStackParamList } from '../../navigation/PropertiesStack';
-import { AppScreen, Button, Card, FilterChip, TextField } from '../../components/ui';
+import { AppScreen, Button, Card, FilterChip, StepIndicator, TextField } from '../../components/ui';
 import { colors, radii, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<PropertiesStackParamList, 'AddProperty'>;
@@ -254,19 +254,9 @@ export function AddPropertyScreen({ navigation }: Props): React.JSX.Element {
 
   return (
     <View style={styles.container}>
-      <View style={styles.progressRow}>
-        {STEP_TITLES.map((label, index) => (
-          <View key={label} style={styles.progressItem}>
-            <View style={[styles.progressDot, index <= step && styles.progressDotActive]} />
-            {index < STEP_TITLES.length - 1 ? (
-              <View style={[styles.progressLine, index < step && styles.progressLineActive]} />
-            ) : null}
-          </View>
-        ))}
+      <View style={styles.progressWrap}>
+        <StepIndicator steps={STEP_TITLES} currentStep={step} />
       </View>
-      <Text style={styles.stepLabel}>
-        Step {step + 1} of {STEP_TITLES.length} · {STEP_TITLES[step]}
-      </Text>
 
       <AppScreen>
         {step === 0 && (
@@ -486,13 +476,7 @@ export function AddPropertyScreen({ navigation }: Props): React.JSX.Element {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  progressRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingTop: spacing.md },
-  progressItem: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  progressDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.border },
-  progressDotActive: { backgroundColor: colors.brand.primaryNavy },
-  progressLine: { flex: 1, height: 2, backgroundColor: colors.border, marginHorizontal: 4 },
-  progressLineActive: { backgroundColor: colors.brand.primaryNavy },
-  stepLabel: { textAlign: 'center', color: colors.text.secondary, fontSize: 12, marginTop: spacing.sm, marginBottom: spacing.sm },
+  progressWrap: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   row: { flexDirection: 'row', gap: spacing.sm },
   flex1: { flex: 1 },
   currencyField: { width: 96 },

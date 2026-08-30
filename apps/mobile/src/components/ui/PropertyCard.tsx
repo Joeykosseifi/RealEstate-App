@@ -1,6 +1,7 @@
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { colors, priceText, radii, shadows, spacing, typography } from '../../theme';
+import { Image, StyleSheet, Text, View } from 'react-native';
+import { colors, priceText, radii, spacing, typography } from '../../theme';
 import { BusinessStatusBadge, PublicationStatusBadge } from './StatusBadge';
+import { Card } from './Card';
 import type { PropertyListItem } from '../../api/types';
 
 interface PropertyCardProps {
@@ -38,43 +39,37 @@ export function PropertyCard({
   const location = [property.area, property.city].filter(Boolean).join(', ');
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
-      {imageUrl ? (
-        <Image source={{ uri: imageUrl }} style={styles.image} />
-      ) : (
-        <View style={[styles.image, styles.imagePlaceholder]}>
-          <Text style={styles.imagePlaceholderText}>No photo</Text>
+    <Card onPress={onPress} style={styles.card} padded={false}>
+      <View style={styles.row}>
+        {imageUrl ? (
+          <Image source={{ uri: imageUrl }} style={styles.image} />
+        ) : (
+          <View style={[styles.image, styles.imagePlaceholder]}>
+            <Text style={styles.imagePlaceholderText}>No photo</Text>
+          </View>
+        )}
+        <View style={styles.body}>
+          <View style={styles.badgeRow}>
+            <BusinessStatusBadge status={property.propertyStatus} />
+            <PublicationStatusBadge status={publicationStatus} />
+          </View>
+          <Text style={typography.h3} numberOfLines={1}>
+            {property.title}
+          </Text>
+          <Text style={priceText}>
+            {property.currency} {property.price.toLocaleString()}
+          </Text>
+          {facts ? <Text style={typography.bodySmall}>{facts}</Text> : null}
+          {location ? <Text style={typography.caption}>{location}</Text> : null}
         </View>
-      )}
-      <View style={styles.body}>
-        <View style={styles.badgeRow}>
-          <BusinessStatusBadge status={property.propertyStatus} />
-          <PublicationStatusBadge status={publicationStatus} />
-        </View>
-        <Text style={typography.h3} numberOfLines={1}>
-          {property.title}
-        </Text>
-        <Text style={priceText}>
-          {property.currency} {property.price.toLocaleString()}
-        </Text>
-        {facts ? <Text style={typography.bodySmall}>{facts}</Text> : null}
-        {location ? <Text style={typography.caption}>{location}</Text> : null}
       </View>
-    </TouchableOpacity>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.smd,
-    marginBottom: spacing.smd,
-    ...shadows.sm,
-  },
+  card: { marginBottom: spacing.smd, padding: spacing.smd },
+  row: { flexDirection: 'row' },
   image: { width: 84, height: 84, borderRadius: radii.control, backgroundColor: colors.background },
   imagePlaceholder: { alignItems: 'center', justifyContent: 'center' },
   imagePlaceholderText: { fontSize: 11, color: colors.text.secondary },

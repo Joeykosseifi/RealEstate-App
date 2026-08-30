@@ -1,24 +1,31 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthContext';
 import { getWorkspaceDetail, requestPasswordReset, updateWorkspaceContact } from '../api/auth';
 import { ApiError } from '../api/client';
 import type { WorkspaceSummary } from '../api/types';
-import { AppScreen, Button, Card, SectionHeader, TextField, confirmDestructive } from '../components/ui';
+import { Avatar, Button, Card, SectionHeader, TextField, confirmDestructive } from '../components/ui';
 import { colors, radii, spacing, typography } from '../theme';
 
 /**
  * Role-aware account/profile screen (Milestone 6 & 6.1, restyled
- * Milestone 7 — see docs/PRODUCT.md "Account settings" and "Workspace
- * experience"). A CLIENT sees only their own identity + sign out. A
- * professional (AGENT/COMPANY) additionally sees a workspace switcher
- * (the real workspace name is always shown — never a generic "Personal
- * Workspace" placeholder, see docs/DESIGN_SYSTEM.md "Company
- * experience") and, when they hold `workspace.update`, the workspace's
- * public marketplace contact info.
+ * Milestone 7, visually re-polished in the ProBase parity pass) — see
+ * docs/PRODUCT.md "Account settings" and "Workspace experience". A
+ * CLIENT sees only their own identity + sign out. A professional
+ * (AGENT/COMPANY) additionally sees a workspace switcher (the real
+ * workspace name is always shown — never a generic "Personal Workspace"
+ * placeholder) and, when they hold `workspace.update`, the workspace's
+ * public marketplace contact info. Every route/action here already
+ * existed before this pass — only the presentation changed.
  */
 export function AccountScreen(): React.JSX.Element {
   const { user, workspaces, currentWorkspace, permissions, selectWorkspace, logout } = useAuth();
+  const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
   const isProfessional = user?.accountType !== 'CLIENT';
   const canEditContact = permissions.has('workspace.update');
 
@@ -95,97 +102,113 @@ export function AccountScreen(): React.JSX.Element {
 
   const onLogout = () => confirmDestructive('Sign out?', undefined, 'Sign Out', () => void logout());
 
+  const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ');
+
   return (
-    <AppScreen>
-      <View style={styles.identity}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{user?.firstName?.[0]}</Text>
+    <View style={styles.container}>
+      {isFocused ? <StatusBar style="light" /> : null}
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
+          <Avatar name={fullName || 'User'} size={72} style={styles.avatar} />
+          <Text style={styles.name}>{fullName}</Text>
+          <Text style={styles.email}>{user?.email}</Text>
+          {user?.phone ? <Text style={styles.email}>{user.phone}</Text> : null}
         </View>
-        <Text style={typography.h2}>
-          {user?.firstName} {user?.lastName}
-        </Text>
-        <Text style={typography.bodySmall}>{user?.email}</Text>
-        {user?.phone ? <Text style={typography.bodySmall}>{user.phone}</Text> : null}
-      </View>
 
-      {isProfessional && workspaces.length > 0 && (
-        <View style={styles.section}>
-          <SectionHeader title="Workspace" />
-          {workspaces.map((workspace) => {
-            const active = workspace.id === currentWorkspace?.id;
-            return (
-              <TouchableOpacity
-                key={workspace.id}
-                style={[styles.workspaceRow, active && styles.workspaceRowActive]}
-                onPress={() => onSwitchWorkspace(workspace)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-              >
-                <View style={styles.flex1}>
-                  <Text style={typography.h3}>{workspace.name}</Text>
-                  <Text style={typography.caption}>
-                    {workspace.type === 'COMPANY' ? 'Company workspace' : 'Personal workspace'}
-                  </Text>
-                </View>
-                {active ? <Text style={styles.activeBadge}>Active</Text> : null}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
-
-      {isProfessional && canEditContact && (
-        <View style={styles.section}>
-          <SectionHeader title="Public Contact Info" />
-          <Text style={[typography.bodySmall, styles.hintSpacing]}>
-            Shown to clients on this workspace&apos;s published listings. Leave a field blank to hide it.
-          </Text>
-          {!loadingContact && (
-            <Card>
-              <TextField label="Phone" value={contactPhone} onChangeText={setContactPhone} keyboardType="phone-pad" />
-              <TextField label="WhatsApp" value={contactWhatsapp} onChangeText={setContactWhatsapp} keyboardType="phone-pad" />
-              <TextField label="Email" value={contactEmail} onChangeText={setContactEmail} keyboardType="email-address" autoCapitalize="none" />
-              {contactError ? <Text style={styles.error}>{contactError}</Text> : null}
-              {contactSaved ? <Text style={styles.success}>Saved.</Text> : null}
-              <Button label="Save" size="sm" onPress={() => void onSaveContact()} loading={savingContact} />
-            </Card>
+        <View style={styles.body}>
+          {isProfessional && workspaces.length > 0 && (
+            <View style={styles.section}>
+              <SectionHeader title="Workspace" />
+              {workspaces.map((workspace) => {
+                const active = workspace.id === currentWorkspace?.id;
+                return (
+                  <TouchableOpacity
+                    key={workspace.id}
+                    style={[styles.workspaceRow, active && styles.workspaceRowActive]}
+                    onPress={() => onSwitchWorkspace(workspace)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <View style={styles.workspaceIcon}>
+                      <Ionicons
+                        name={workspace.type === 'COMPANY' ? 'business-outline' : 'person-outline'}
+                        size={18}
+                        color={colors.brand.primaryNavy}
+                      />
+                    </View>
+                    <View style={styles.flex1}>
+                      <Text style={typography.h3}>{workspace.name}</Text>
+                      <Text style={typography.caption}>
+                        {workspace.type === 'COMPANY' ? 'Company workspace' : 'Personal workspace'}
+                      </Text>
+                    </View>
+                    {active ? <Ionicons name="checkmark-circle" size={20} color={colors.brand.gold} /> : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           )}
+
+          {isProfessional && canEditContact && (
+            <View style={styles.section}>
+              <SectionHeader title="Public Contact Info" />
+              <Text style={[typography.bodySmall, styles.hintSpacing]}>
+                Shown to clients on this workspace&apos;s published listings. Leave a field blank to hide it.
+              </Text>
+              {!loadingContact && (
+                <Card>
+                  <TextField label="Phone" value={contactPhone} onChangeText={setContactPhone} keyboardType="phone-pad" />
+                  <TextField label="WhatsApp" value={contactWhatsapp} onChangeText={setContactWhatsapp} keyboardType="phone-pad" />
+                  <TextField label="Email" value={contactEmail} onChangeText={setContactEmail} keyboardType="email-address" autoCapitalize="none" />
+                  {contactError ? <Text style={styles.error}>{contactError}</Text> : null}
+                  {contactSaved ? <Text style={styles.success}>Saved.</Text> : null}
+                  <Button label="Save" size="sm" onPress={() => void onSaveContact()} loading={savingContact} />
+                </Card>
+              )}
+            </View>
+          )}
+
+          <View style={styles.section}>
+            <SectionHeader title="Security" />
+            <TouchableOpacity style={styles.menuRow} onPress={() => void onRequestPasswordReset()} disabled={resettingPassword}>
+              <View style={styles.menuIcon}>
+                <Ionicons name="lock-closed-outline" size={18} color={colors.brand.primaryNavy} />
+              </View>
+              <Text style={[typography.body, styles.flex1]}>Reset Password</Text>
+              <Ionicons name="chevron-forward" size={18} color={colors.text.secondary} />
+            </TouchableOpacity>
+          </View>
+
+          <Button label="Sign Out" variant="destructive" onPress={onLogout} style={styles.logoutButton} />
         </View>
-      )}
-
-      <View style={styles.section}>
-        <SectionHeader title="Security" />
-        <Button
-          label="Reset Password"
-          variant="secondary"
-          onPress={() => void onRequestPasswordReset()}
-          loading={resettingPassword}
-        />
-      </View>
-
-      <Button label="Sign Out" variant="destructive" onPress={onLogout} style={styles.logoutButton} />
-    </AppScreen>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  identity: { alignItems: 'center', marginTop: spacing.lg, marginBottom: spacing.xl },
-  avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.brand.primaryNavy,
+  container: { flex: 1, backgroundColor: colors.background },
+  scroll: { flex: 1 },
+  scrollContent: { paddingBottom: 48 },
+  header: {
+    backgroundColor: colors.brand.deepNavy,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.smd,
+    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    borderBottomLeftRadius: radii.cardLarge,
+    borderBottomRightRadius: radii.cardLarge,
   },
-  avatarText: { color: colors.text.inverse, fontSize: 24, fontWeight: '700' },
+  avatar: { marginBottom: spacing.smd, backgroundColor: colors.brand.gold },
+  name: { color: colors.text.inverse, fontSize: 20, fontWeight: '700' },
+  email: { color: 'rgba(255,255,255,0.75)', fontSize: 13, marginTop: 2 },
+  body: { paddingHorizontal: spacing.lg, marginTop: spacing.lg },
   section: { marginBottom: spacing.xl },
   hintSpacing: { marginBottom: spacing.smd },
   flex1: { flex: 1 },
   workspaceRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.smd,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.card,
@@ -193,8 +216,33 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     backgroundColor: colors.surface,
   },
-  workspaceRowActive: { borderColor: colors.brand.primaryNavy, backgroundColor: colors.selectedTint },
-  activeBadge: { color: colors.brand.primaryNavy, fontWeight: '700', fontSize: 12 },
+  workspaceRowActive: { borderColor: colors.brand.gold, backgroundColor: colors.selectedTint },
+  workspaceIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.control,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.smd,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.card,
+    padding: spacing.smd,
+  },
+  menuIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.control,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   error: { color: colors.danger, marginBottom: spacing.sm },
   success: { color: colors.success, marginBottom: spacing.sm },
   logoutButton: { marginTop: spacing.sm },

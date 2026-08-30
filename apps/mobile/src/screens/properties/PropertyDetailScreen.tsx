@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
+  type NativeSyntheticEvent,
+  type NativeScrollEvent,
+} from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../auth/AuthContext';
 import {
@@ -42,6 +54,24 @@ import { colors, priceText, radii, spacing, typography } from '../../theme';
 type Props = NativeStackScreenProps<PropertiesStackParamList, 'PropertyDetail'>;
 type Tab = 'details' | 'photos' | 'location' | 'private';
 
+function SpecItem({
+  icon,
+  value,
+  label,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  value: string;
+  label: string;
+}) {
+  return (
+    <View style={styles.specItem}>
+      <Ionicons name={icon} size={18} color={colors.brand.primaryNavy} />
+      <Text style={styles.specValue}>{value}</Text>
+      <Text style={styles.specLabel}>{label}</Text>
+    </View>
+  );
+}
+
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.detailRow}>
@@ -63,6 +93,8 @@ function Row({ label, value }: { label: string; value: string }) {
 export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.Element {
   const { propertyId } = route.params;
   const { currentWorkspace, permissions } = useAuth();
+  const { width: windowWidth } = useWindowDimensions();
+  const heroWidth = windowWidth - spacing.lg * 2;
   const [property, setProperty] = useState<PropertyDetail | null>(null);
   const [publication, setPublication] = useState<PublicationDetail | null>(null);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
@@ -74,6 +106,7 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
   const [publicationActionPending, setPublicationActionPending] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   const load = useCallback(async () => {
     if (!currentWorkspace) return;
@@ -204,22 +237,61 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
   }
 
   const images = property.media.filter((m) => m.mediaType === 'IMAGE');
-  const heroUrl = property.primaryMedia ? photoUrls[property.primaryMedia.id] : undefined;
+  const onGalleryScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const width = event.nativeEvent.layoutMeasurement.width;
+    if (!width) return;
+    const index = Math.round(event.nativeEvent.contentOffset.x / width);
+    setActiveImageIndex(index);
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.heroWrap}>
-        {heroUrl ? (
-          <Image source={{ uri: heroUrl }} style={styles.hero} resizeMode="cover" />
+        {images.length > 0 ? (
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={onGalleryScroll}
+          >
+            {images.map((media) =>
+              photoUrls[media.id] ? (
+                <Image
+                  key={media.id}
+                  source={{ uri: photoUrls[media.id] }}
+                  style={[styles.hero, { width: heroWidth }]}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View key={media.id} style={[styles.hero, styles.heroPlaceholder, { width: heroWidth }]} />
+              ),
+            )}
+          </ScrollView>
         ) : (
           <View style={[styles.hero, styles.heroPlaceholder]}>
             <Text style={typography.bodySmall}>No photo yet</Text>
           </View>
         )}
-        {images.length > 0 ? (
-          <View style={styles.photoCountBadge}>
-            <Text style={styles.photoCountText}>📷 {images.length}</Text>
-          </View>
+
+        <IconButton
+          icon={<Ionicons name="arrow-back" size={20} color={colors.text.primary} />}
+          onPress={() => navigation.goBack()}
+          accessibilityLabel="Back"
+          variant="filled"
+          style={styles.heroBackButton}
+        />
+
+        {images.length > 1 ? (
+          <>
+            <View style={styles.photoCountBadge}>
+              <Text style={styles.photoCountText}>📷 {activeImageIndex + 1}/{images.length}</Text>
+            </View>
+            <View style={styles.dotsRow}>
+              {images.map((media, index) => (
+                <View key={media.id} style={[styles.dot, index === activeImageIndex && styles.dotActive]} />
+              ))}
+            </View>
+          </>
         ) : null}
       </View>
 
@@ -245,6 +317,12 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
         <BusinessStatusBadge status={property.propertyStatus} />
         <PublicationStatusBadge status={publication?.status ?? null} />
       </View>
+
+      <Card style={styles.specCard}>
+        <SpecItem icon="bed-outline" value={property.bedrooms?.toString() ?? '—'} label="Beds" />
+        <SpecItem icon="water-outline" value={property.bathrooms?.toString() ?? '—'} label="Baths" />
+        <SpecItem icon="resize-outline" value={property.areaSqm ? `${property.areaSqm}` : '—'} label="m² Area" />
+      </Card>
 
       {property.propertyStatus === 'ARCHIVED' && (
         <Card style={styles.archivedBanner}>
@@ -318,9 +396,6 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
 
       {tab === 'details' && (
         <Card style={styles.tabCard}>
-          <Row label="Bedrooms" value={property.bedrooms?.toString() ?? '—'} />
-          <Row label="Bathrooms" value={property.bathrooms?.toString() ?? '—'} />
-          <Row label="Area" value={property.areaSqm ? `${property.areaSqm} m²` : '—'} />
           <Row label="Type" value={property.propertyType} />
           <Row label="Purpose" value={property.listingPurpose} />
           {property.description ? <Text style={[typography.body, styles.description]}>{property.description}</Text> : null}
@@ -429,23 +504,39 @@ export function PropertyDetailScreen({ route, navigation }: Props): React.JSX.El
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.lg, paddingBottom: 48 },
-  heroWrap: { marginBottom: spacing.md },
-  hero: { width: '100%', height: 220, borderRadius: radii.image, backgroundColor: colors.border },
+  heroWrap: { marginBottom: spacing.md, borderRadius: radii.image, overflow: 'hidden' },
+  hero: { width: '100%', height: 240, borderRadius: radii.image, backgroundColor: colors.border },
   heroPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  heroBackButton: { position: 'absolute', top: spacing.sm, left: spacing.sm },
   photoCountBadge: {
     position: 'absolute',
     right: spacing.sm,
-    bottom: spacing.sm,
+    top: spacing.sm,
     backgroundColor: 'rgba(15,31,51,0.7)',
     borderRadius: radii.pill,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
   photoCountText: { color: colors.text.inverse, fontSize: 12, fontWeight: '600' },
+  dotsRow: {
+    position: 'absolute',
+    bottom: spacing.sm,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.5)' },
+  dotActive: { backgroundColor: colors.text.inverse, width: 16 },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm },
   titleText: { flexShrink: 1 },
   editIcon: { fontSize: 16, color: colors.brand.primaryNavy },
   badgeRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.md },
+  specCard: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: spacing.md },
+  specItem: { alignItems: 'center', gap: 2 },
+  specValue: { fontSize: 16, fontWeight: '700', color: colors.text.primary, marginTop: 4 },
+  specLabel: { fontSize: 12, color: colors.text.secondary },
   archivedBanner: { backgroundColor: colors.status.pending.bg, marginBottom: spacing.md },
   archivedBannerText: { color: colors.status.pending.fg, fontSize: 13 },
   publicationCard: { marginBottom: spacing.lg },

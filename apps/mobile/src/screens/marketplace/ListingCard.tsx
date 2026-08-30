@@ -1,6 +1,7 @@
-import { Image, StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import type { PublicPropertyListItem } from '../../api/types';
-import { colors, priceText, radii, shadows, spacing, typography } from '../../theme';
+import { Card } from '../../components/ui';
+import { colors, priceText, radii, spacing, typography } from '../../theme';
 
 /**
  * Shared marketplace card — reused by Home, Search, and Favorites so the
@@ -22,7 +23,7 @@ export function ListingCard({
 }) {
   const location = [listing.location.city, listing.location.area].filter(Boolean).join(', ');
   return (
-    <TouchableOpacity style={[styles.card, style]} onPress={onPress} activeOpacity={0.85}>
+    <Card onPress={onPress} style={[styles.card, style]} padded={false}>
       {listing.mainImage?.url ? (
         <Image source={{ uri: listing.mainImage.url }} style={styles.image} resizeMode="cover" />
       ) : (
@@ -54,20 +55,12 @@ export function ListingCard({
           {listing.identity.displayName}
         </Text>
       </View>
-    </TouchableOpacity>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    width: 230,
-    borderRadius: radii.cardLarge,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-    ...shadows.sm,
-  },
+  card: { width: 230, borderRadius: radii.cardLarge, overflow: 'hidden' },
   image: { width: '100%', height: 150, backgroundColor: colors.border },
   imagePlaceholder: { alignItems: 'center', justifyContent: 'center' },
   imagePlaceholderText: { color: colors.text.secondary, fontSize: 12 },
