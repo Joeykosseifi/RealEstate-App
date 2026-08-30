@@ -52,11 +52,13 @@ export function QuickCreateButton(): React.JSX.Element {
 const styles = StyleSheet.create({
   wrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   button: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: colors.brand.gold,
-    marginTop: -20,
+    marginTop: -22,
+    borderWidth: 4,
+    borderColor: colors.background,
     ...shadows.md,
   },
   plus: { fontSize: 26, fontWeight: '600', color: colors.text.onGold, lineHeight: 30 },

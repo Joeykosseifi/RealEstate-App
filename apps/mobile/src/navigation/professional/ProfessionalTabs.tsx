@@ -1,13 +1,14 @@
 import { View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import type { NavigatorScreenParams } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { DashboardScreen } from '../../screens/DashboardScreen';
 import { AccountScreen } from '../../screens/AccountScreen';
 import { PropertiesStack, type PropertiesStackParamList } from '../PropertiesStack';
 import { ClientsStack, type ClientsStackParamList } from '../ClientsStack';
 import { QuickCreateButton } from './QuickCreateButton';
-import { colors } from '../../theme';
+import { colors, shadows } from '../../theme';
 
 export type ProfessionalTabParamList = {
   Dashboard: undefined;
@@ -35,13 +36,23 @@ function NoopScreen(): React.JSX.Element {
  * the current workspace (shown on Dashboard/Account) differs.
  */
 export function ProfessionalTabs(): React.JSX.Element {
+  const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.brand.primaryNavy,
         tabBarInactiveTintColor: colors.text.secondary,
-        tabBarStyle: { borderTopColor: colors.border },
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+          borderTopWidth: 1,
+          height: 58 + insets.bottom,
+          paddingTop: 8,
+          paddingBottom: Math.max(insets.bottom, 8),
+          ...shadows.sm,
+        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
       }}
     >
       <Tab.Screen

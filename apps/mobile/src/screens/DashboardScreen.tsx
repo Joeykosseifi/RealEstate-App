@@ -9,8 +9,8 @@ import { useAuth } from '../auth/AuthContext';
 import { getDashboard } from '../api/dashboard';
 import type { ProfessionalTabParamList } from '../navigation/professional/ProfessionalTabs';
 import type { PropertyListItem, WorkspaceDashboard } from '../api/types';
-import { Avatar, Button, Card, ErrorState, PropertyCard, SectionHeader, SkeletonList } from '../components/ui';
-import { colors, radii, spacing, typography } from '../theme';
+import { Avatar, Card, EmptyState, ErrorState, PropertyCard, SectionHeader, SkeletonList } from '../components/ui';
+import { colors, radii, shadows, spacing, typography } from '../theme';
 
 type Props = BottomTabScreenProps<ProfessionalTabParamList, 'Dashboard'>;
 
@@ -21,19 +21,29 @@ function greeting(): string {
   return 'Good evening';
 }
 
+type StatBorder = 'right' | 'bottom' | 'right-bottom';
+
 function StatTile({
   icon,
   label,
   value,
+  bordered,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   value: number;
+  bordered?: StatBorder;
 }): React.JSX.Element {
   return (
-    <View style={styles.statTile}>
-      <View style={styles.statIcon}>
-        <Ionicons name={icon} size={18} color={colors.brand.primaryNavy} />
+    <View
+      style={[
+        styles.statCell,
+        (bordered === 'right' || bordered === 'right-bottom') && styles.statCellBorderRight,
+        (bordered === 'bottom' || bordered === 'right-bottom') && styles.statCellBorderBottom,
+      ]}
+    >
+      <View style={styles.statIconWrap}>
+        <Ionicons name={icon} size={16} color={colors.brand.primaryNavy} />
       </View>
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
@@ -117,54 +127,94 @@ export function DashboardScreen({ navigation }: Props): React.JSX.Element {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={colors.surface} />}
       >
-        <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-          <View style={styles.headerRow}>
+        <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
+          <View style={styles.headerTopRow}>
             <View style={styles.flex1}>
-              <Text style={styles.greeting}>
-                {greeting()}, {user?.firstName} 👋
+              <Text style={styles.eyebrow}>{greeting().toUpperCase()}</Text>
+              <Text style={styles.name} numberOfLines={1}>
+                {user?.firstName ?? 'Welcome'} 👋
               </Text>
-              <TouchableOpacity
-                style={styles.workspacePill}
-                onPress={nextWorkspace}
-                disabled={workspaces.length < 2}
-                accessibilityRole="button"
-                accessibilityLabel={`Current workspace: ${currentWorkspace.name}`}
-              >
-                <Text style={styles.workspacePillText} numberOfLines={1}>
-                  {currentWorkspace.name}
-                </Text>
-                {workspaces.length > 1 ? <Ionicons name="chevron-down" size={12} color={colors.text.inverse} /> : null}
-              </TouchableOpacity>
             </View>
-            <Avatar name={fullName || 'User'} size={44} />
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Account')}
+              accessibilityRole="button"
+              accessibilityLabel="Open account"
+              hitSlop={8}
+            >
+              <Avatar name={fullName || 'User'} size={48} style={styles.avatarRing} />
+            </TouchableOpacity>
           </View>
+
+          <TouchableOpacity
+            style={styles.workspacePill}
+            onPress={nextWorkspace}
+            disabled={workspaces.length < 2}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel={`Current workspace: ${currentWorkspace.name}`}
+          >
+            <View style={styles.workspaceIconWrap}>
+              <Ionicons
+                name={currentWorkspace.type === 'COMPANY' ? 'business' : 'person'}
+                size={11}
+                color={colors.brand.gold}
+              />
+            </View>
+            <Text style={styles.workspacePillText} numberOfLines={1}>
+              {currentWorkspace.name}
+            </Text>
+            {workspaces.length > 1 ? (
+              <Ionicons name="swap-horizontal-outline" size={14} color="rgba(255,255,255,0.7)" />
+            ) : null}
+          </TouchableOpacity>
         </View>
 
         <View style={styles.body}>
           {permissions.has('property.create') ? (
-            <Button
-              label="+ Add New Property"
-              variant="gold"
+            <TouchableOpacity
+              style={styles.ctaCard}
+              activeOpacity={0.85}
               onPress={() => navigation.navigate('Properties', { screen: 'AddProperty' })}
-              style={styles.addButton}
-            />
+              accessibilityRole="button"
+              accessibilityLabel="Add new property"
+            >
+              <View style={styles.ctaIconWrap}>
+                <Ionicons name="add" size={24} color={colors.text.onGold} />
+              </View>
+              <View style={styles.flex1}>
+                <Text style={styles.ctaTitle}>Add New Property</Text>
+                <Text style={styles.ctaSubtitle}>List a property to your inventory</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.text.onGold} />
+            </TouchableOpacity>
           ) : null}
 
           {loading ? (
-            <SkeletonList count={2} />
+            <View style={styles.loadingBlock}>
+              <SkeletonList count={2} />
+            </View>
           ) : error || !dashboard ? (
             <ErrorState message={error ?? undefined} onRetry={() => void load()} />
           ) : (
             <>
               {dashboard.properties && (
                 <View style={styles.section}>
-                  <SectionHeader title="Properties" />
-                  <View style={styles.statsRow}>
-                    <StatTile icon="home-outline" label="Total" value={dashboard.properties.total} />
-                    <StatTile icon="lock-closed-outline" label="Private" value={dashboard.properties.private} />
-                    <StatTile icon="checkmark-circle-outline" label="Published" value={dashboard.properties.published} />
-                    <StatTile icon="time-outline" label="Pending Review" value={dashboard.properties.pendingReview} />
-                  </View>
+                  <Card style={styles.statsCard}>
+                    <SectionHeader title="Properties" />
+                    <View style={styles.statsGridRow}>
+                      <StatTile icon="home-outline" label="Total" value={dashboard.properties.total} bordered="right-bottom" />
+                      <StatTile icon="lock-closed-outline" label="Private" value={dashboard.properties.private} bordered="bottom" />
+                    </View>
+                    <View style={styles.statsGridRow}>
+                      <StatTile
+                        icon="checkmark-circle-outline"
+                        label="Published"
+                        value={dashboard.properties.published}
+                        bordered="right"
+                      />
+                      <StatTile icon="time-outline" label="Pending Review" value={dashboard.properties.pendingReview} />
+                    </View>
+                  </Card>
 
                   {dashboard.properties.recent.length > 0 && (
                     <View style={styles.recentBlock}>
@@ -189,11 +239,17 @@ export function DashboardScreen({ navigation }: Props): React.JSX.Element {
 
               {dashboard.clients && (
                 <View style={styles.section}>
-                  <SectionHeader title="Clients" />
-                  <View style={styles.statsRow}>
-                    <StatTile icon="people-outline" label="Total" value={dashboard.clients.total} />
-                    <StatTile icon="document-text-outline" label="Active Requirements" value={dashboard.clients.activeRequirements} />
-                  </View>
+                  <Card style={styles.statsCard}>
+                    <SectionHeader title="Clients" />
+                    <View style={styles.statsGridRow}>
+                      <StatTile icon="people-outline" label="Total" value={dashboard.clients.total} bordered="right" />
+                      <StatTile
+                        icon="document-text-outline"
+                        label="Active Requirements"
+                        value={dashboard.clients.activeRequirements}
+                      />
+                    </View>
+                  </Card>
 
                   {dashboard.clients.recent.length > 0 && (
                     <View style={styles.recentBlock}>
@@ -212,6 +268,7 @@ export function DashboardScreen({ navigation }: Props): React.JSX.Element {
                               </Text>
                               <Text style={typography.bodySmall}>{client.status}</Text>
                             </View>
+                            <Ionicons name="chevron-forward" size={18} color={colors.text.secondary} />
                           </View>
                         </Card>
                       ))}
@@ -221,7 +278,11 @@ export function DashboardScreen({ navigation }: Props): React.JSX.Element {
               )}
 
               {!dashboard.properties && !dashboard.clients && (
-                <Text style={typography.bodySmall}>Nothing to show yet for your role in this workspace.</Text>
+                <EmptyState
+                  icon="📋"
+                  title="Nothing to show yet"
+                  message="Your role in this workspace doesn't have anything to display here."
+                />
               )}
             </>
           )}
@@ -239,37 +300,63 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: colors.brand.deepNavy,
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.xxl,
     borderBottomLeftRadius: radii.cardLarge,
     borderBottomRightRadius: radii.cardLarge,
   },
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.smd },
-  greeting: { color: colors.text.inverse, fontSize: 20, fontWeight: '700', marginBottom: spacing.sm },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.smd, marginBottom: spacing.lg },
+  eyebrow: { color: colors.brand.gold, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 4 },
+  name: { color: colors.text.inverse, fontSize: 24, fontWeight: '700' },
+  avatarRing: { borderWidth: 2, borderColor: 'rgba(201,148,47,0.6)' },
   workspacePill: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: radii.pill,
     paddingHorizontal: spacing.smd,
-    paddingVertical: 6,
-    maxWidth: 220,
-    gap: 4,
+    paddingVertical: 7,
+    maxWidth: '100%',
+    gap: spacing.xs,
+  },
+  workspaceIconWrap: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   workspacePillText: { fontSize: 12, fontWeight: '600', color: colors.text.inverse, flexShrink: 1 },
-  body: { paddingHorizontal: spacing.lg, marginTop: -spacing.lg },
-  addButton: { marginTop: spacing.lg, marginBottom: spacing.lg },
-  section: { marginBottom: spacing.xl },
-  statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  statTile: {
-    flexBasis: '47%',
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.smd,
+  body: { paddingHorizontal: spacing.lg, marginTop: -spacing.xl },
+  ctaCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.brand.gold,
+    borderRadius: radii.cardLarge,
+    padding: spacing.md,
+    gap: spacing.smd,
+    marginBottom: spacing.xl,
+    ...shadows.md,
   },
-  statIcon: {
+  ctaIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(15,31,51,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ctaTitle: { fontSize: 16, fontWeight: '700', color: colors.text.onGold },
+  ctaSubtitle: { fontSize: 12, fontWeight: '500', color: 'rgba(15,31,51,0.7)', marginTop: 2 },
+  loadingBlock: { marginTop: spacing.xs },
+  section: { marginBottom: spacing.xl },
+  statsCard: { padding: spacing.smd },
+  statsGridRow: { flexDirection: 'row' },
+  statCell: { flex: 1, alignItems: 'flex-start', paddingVertical: spacing.smd, paddingHorizontal: spacing.smd },
+  statCellBorderRight: { borderRightWidth: 1, borderRightColor: colors.border },
+  statCellBorderBottom: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  statIconWrap: {
     width: 32,
     height: 32,
     borderRadius: radii.control,
@@ -278,7 +365,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: spacing.sm,
   },
-  statValue: { fontSize: 22, fontWeight: '700', color: colors.brand.primaryNavy },
+  statValue: { fontSize: 24, fontWeight: '800', color: colors.brand.primaryNavy, lineHeight: 28 },
   statLabel: { color: colors.text.secondary, fontSize: 12, marginTop: 2 },
   recentBlock: { marginTop: spacing.lg },
   clientCard: { marginBottom: spacing.sm },
