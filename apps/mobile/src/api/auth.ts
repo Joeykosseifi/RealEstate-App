@@ -12,6 +12,20 @@ export function getCurrentUser(): Promise<AuthUser> {
   return apiRequest('/auth/me');
 }
 
+/**
+ * Revokes the current session on the server immediately (see
+ * `SessionsService.revokeById` / `JwtStrategy` on the API side) — called
+ * by `AuthContext.logout` before local credentials are cleared, so a
+ * signed-out access token can never keep authenticating requests from
+ * elsewhere. Best-effort from the caller's side: `AuthContext.logout`
+ * still clears local credentials even if this call fails (offline, or
+ * the session is already gone) — a local sign-out must never get stuck
+ * waiting on the network.
+ */
+export function logout(): Promise<void> {
+  return apiRequest('/auth/logout', { method: 'POST' });
+}
+
 // ---------------------------------------------------------------------------
 // Registration & onboarding (Milestone 6.1) — see docs/API.md
 // "Registration → activation flow". Registration never returns tokens;

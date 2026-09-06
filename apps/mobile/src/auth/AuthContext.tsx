@@ -5,6 +5,7 @@ import {
   getWorkspaceDetail,
   listWorkspaces,
   login as loginRequest,
+  logout as logoutRequest,
 } from '../api/auth';
 import { clearTokens, getStoredAccessToken, storeTokens } from '../api/client';
 import type { AuthUser, WorkspaceSummary } from '../api/types';
@@ -100,6 +101,14 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
   }, []);
 
   const logout = useCallback(async () => {
+    try {
+      // Revoke the session on the server first — a best-effort call:
+      // being offline, or the session already being gone, must never
+      // block signing out locally.
+      await logoutRequest();
+    } catch {
+      // Ignored — see comment above.
+    }
     await clearTokens();
     setUser(null);
     setWorkspaces([]);
