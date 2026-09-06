@@ -4,7 +4,9 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../auth/AuthContext';
 import { getProperty, updateProperty } from '../../api/properties';
 import { ApiError } from '../../api/client';
+import type { PropertyOwnerDetail } from '../../api/types';
 import type { PropertiesStackParamList } from '../../navigation/PropertiesStack';
+import { buildOwnersUpdatePayload } from '../../properties/ownersPayload';
 import { AppScreen, Button, ErrorState, FilterChip, LoadingState, TextField } from '../../components/ui';
 import { colors, spacing, typography } from '../../theme';
 
@@ -51,6 +53,7 @@ export function EditPropertyScreen({ route, navigation }: Props): React.JSX.Elem
   const [bathrooms, setBathrooms] = useState('');
   const [areaSqm, setAreaSqm] = useState('');
   const [hasOwnerSection, setHasOwnerSection] = useState(false);
+  const [existingOwners, setExistingOwners] = useState<PropertyOwnerDetail[]>([]);
   const [ownerName, setOwnerName] = useState('');
   const [ownerPhone, setOwnerPhone] = useState('');
   const [hasPrivateSection, setHasPrivateSection] = useState(false);
@@ -76,6 +79,7 @@ export function EditPropertyScreen({ route, navigation }: Props): React.JSX.Elem
       setAreaSqm(property.areaSqm !== null ? String(property.areaSqm) : '');
       if (property.owners) {
         setHasOwnerSection(true);
+        setExistingOwners(property.owners);
         const owner = property.owners[0];
         setOwnerName(owner?.fullName ?? '');
         setOwnerPhone(owner?.phone ?? '');
@@ -108,19 +112,25 @@ export function EditPropertyScreen({ route, navigation }: Props): React.JSX.Elem
 
     setSubmitting(true);
     try {
+      const ownersPayload = hasOwnerSection
+        ? buildOwnersUpdatePayload(existingOwners, { fullName: ownerName, phone: ownerPhone })
+        : undefined;
+
       await updateProperty(currentWorkspace.id, propertyId, {
         propertyType,
         listingPurpose,
         title: title.trim(),
-        description: description.trim() || undefined,
+        // Sent as-is (even empty) rather than `|| undefined` — this is an
+        // edit of a previously-loaded property, so an intentionally
+        // cleared description must actually persist as cleared, not be
+        // silently skipped and leave the old value in place.
+        description: description.trim(),
         price: parsedPrice,
         currency: currency.trim().toUpperCase(),
         bedrooms: bedrooms ? Number(bedrooms) : undefined,
         bathrooms: bathrooms ? Number(bathrooms) : undefined,
         areaSqm: areaSqm ? Number(areaSqm) : undefined,
-        ...(hasOwnerSection && ownerName.trim()
-          ? { owners: [{ fullName: ownerName.trim(), phone: ownerPhone.trim() || undefined }] }
-          : {}),
+        ...(ownersPayload ? { owners: ownersPayload } : {}),
         ...(hasPrivateSection
           ? {
               privateDetails: {

@@ -63,7 +63,7 @@ export interface CreatePropertyInput {
     googlePlaceId?: string;
     locationSource?: string;
   };
-  owners?: { fullName: string; phone?: string; email?: string; notes?: string }[];
+  owners?: { fullName: string; phone?: string; email?: string; whatsappPhone?: string; notes?: string }[];
   privateDetails?: { internalNotes?: string; commissionNotes?: string };
 }
 
