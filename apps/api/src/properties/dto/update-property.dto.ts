@@ -52,6 +52,19 @@ const CURRENT_YEAR = new Date().getFullYear();
  * use whole-section replace semantics when present: submitting
  * `owners: [...]` replaces every existing owner row for the property,
  * it does not merge. Omitting a section entirely leaves it untouched.
+ *
+ * `bedrooms`/`bathrooms`/`areaSqm` are the one place this DTO
+ * distinguishes "omitted" from "explicitly cleared": omitting the key
+ * (`undefined`) leaves the stored value untouched, exactly like every
+ * other optional field here, but sending the key with a literal `null`
+ * clears it to no-value. This is deliberate, not a validation gap — a
+ * numeric field has no natural "empty string" to reuse the way
+ * `description` does, and reusing `0` as a "cleared" sentinel would
+ * silently corrupt a real zero-bedroom/zero-bathroom value. `@IsOptional`
+ * already treats `null` the same as `undefined` for validation purposes
+ * (so a client-side range/type constraint is never bypassed by sending
+ * `null`), and Prisma itself is what gives `null` vs `undefined` their
+ * different meanings in the update — see PropertiesService.update.
  */
 export class UpdatePropertyDto {
   @IsOptional()
@@ -87,19 +100,19 @@ export class UpdatePropertyDto {
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  bedrooms?: number;
+  bedrooms?: number | null;
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  bathrooms?: number;
+  bathrooms?: number | null;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0.01)
-  areaSqm?: number;
+  areaSqm?: number | null;
 
   @IsOptional()
   @Type(() => Number)

@@ -127,16 +127,26 @@ export function EditPropertyScreen({ route, navigation }: Props): React.JSX.Elem
         description: description.trim(),
         price: parsedPrice,
         currency: currency.trim().toUpperCase(),
-        bedrooms: bedrooms ? Number(bedrooms) : undefined,
-        bathrooms: bathrooms ? Number(bathrooms) : undefined,
-        areaSqm: areaSqm ? Number(areaSqm) : undefined,
+        // `null` (not `undefined`) when the field is empty: this is an
+        // edit of a previously-loaded property, so an emptied numeric
+        // field must persist as cleared. Sending `null` when the field
+        // was already empty is a harmless no-op — it only ever clears a
+        // value the user could see and chose to remove. `undefined`
+        // would instead be dropped entirely by the request body and the
+        // backend would leave the old value in place unchanged, exactly
+        // like the description bug this mirrors (see UpdatePropertyDto).
+        bedrooms: bedrooms.trim() ? Number(bedrooms) : null,
+        bathrooms: bathrooms.trim() ? Number(bathrooms) : null,
+        areaSqm: areaSqm.trim() ? Number(areaSqm) : null,
         ...(ownersPayload ? { owners: ownersPayload } : {}),
         ...(hasPrivateSection
           ? {
               privateDetails: {
-                internalNotes: internalNotes.trim() || undefined,
+                // Same as `description` above — always sent as-is so an
+                // intentional clear actually persists.
+                internalNotes: internalNotes.trim(),
                 ...(permissions.has('property.view_commission')
-                  ? { commissionNotes: commissionNotes.trim() || undefined }
+                  ? { commissionNotes: commissionNotes.trim() }
                   : {}),
               },
             }

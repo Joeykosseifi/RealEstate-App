@@ -165,4 +165,119 @@ describe('Property update integrity (owner data-loss regression)', () => {
     expect(response.body.price).toBe(123456);
     expect(response.body.description).toBe('Keep me');
   });
+
+  /**
+   * Extends the same "omitted vs. cleared" contract to the numeric
+   * optional fields (bedrooms/bathrooms/areaSqm) and to the two
+   * privateDetails text fields EditPropertyScreen exposes
+   * (internalNotes/commissionNotes). Numeric fields use an explicit
+   * `null` to mean "clear" — never `0`, which would silently corrupt a
+   * genuine zero-bedroom/zero-bathroom value — while the text fields
+   * reuse the same empty-string convention as `description`.
+   */
+  describe('numeric and private-notes fields support the same omitted-vs-cleared contract', () => {
+    it('omitting bedrooms/bathrooms/areaSqm on an unrelated edit leaves them unchanged', async () => {
+      const owner = await registerVerifiedCompanyOwner(testApp);
+      const property = await createProperty(testApp, owner.workspaceId, owner.accessToken, {
+        bedrooms: 3,
+        bathrooms: 2,
+        areaSqm: 120.5,
+      });
+
+      const response = await request(testApp.app.getHttpServer())
+        .patch(`/api/v1/workspaces/${owner.workspaceId}/properties/${property.id}`)
+        .set(...authHeader(owner.accessToken))
+        .send({ price: 111111 })
+        .expect(200);
+
+      expect(response.body.price).toBe(111111);
+      expect(response.body.bedrooms).toBe(3);
+      expect(response.body.bathrooms).toBe(2);
+      expect(response.body.areaSqm).toBe(120.5);
+    });
+
+    it('sending an explicit null for bedrooms/bathrooms/areaSqm clears them (never coerced to 0)', async () => {
+      const owner = await registerVerifiedCompanyOwner(testApp);
+      const property = await createProperty(testApp, owner.workspaceId, owner.accessToken, {
+        bedrooms: 3,
+        bathrooms: 2,
+        areaSqm: 120.5,
+      });
+
+      const cleared = await request(testApp.app.getHttpServer())
+        .patch(`/api/v1/workspaces/${owner.workspaceId}/properties/${property.id}`)
+        .set(...authHeader(owner.accessToken))
+        .send({ bedrooms: null, bathrooms: null, areaSqm: null })
+        .expect(200);
+
+      expect(cleared.body.bedrooms).toBeNull();
+      expect(cleared.body.bathrooms).toBeNull();
+      expect(cleared.body.areaSqm).toBeNull();
+
+      const fetched = await request(testApp.app.getHttpServer())
+        .get(`/api/v1/workspaces/${owner.workspaceId}/properties/${property.id}`)
+        .set(...authHeader(owner.accessToken))
+        .expect(200);
+      expect(fetched.body.bedrooms).toBeNull();
+      expect(fetched.body.bathrooms).toBeNull();
+      expect(fetched.body.areaSqm).toBeNull();
+    });
+
+    it('clearing bedrooms to null does not disturb an untouched bathrooms value, and vice versa', async () => {
+      const owner = await registerVerifiedCompanyOwner(testApp);
+      const property = await createProperty(testApp, owner.workspaceId, owner.accessToken, {
+        bedrooms: 4,
+        bathrooms: 3,
+      });
+
+      const response = await request(testApp.app.getHttpServer())
+        .patch(`/api/v1/workspaces/${owner.workspaceId}/properties/${property.id}`)
+        .set(...authHeader(owner.accessToken))
+        .send({ bedrooms: null })
+        .expect(200);
+
+      expect(response.body.bedrooms).toBeNull();
+      expect(response.body.bathrooms).toBe(3);
+    });
+
+    it('omitting privateDetails on an unrelated edit leaves internalNotes/commissionNotes unchanged', async () => {
+      const owner = await registerVerifiedCompanyOwner(testApp);
+      const property = await createProperty(testApp, owner.workspaceId, owner.accessToken, {
+        privateDetails: { internalNotes: 'Keep me', commissionNotes: 'Also keep me' },
+      });
+
+      const response = await request(testApp.app.getHttpServer())
+        .patch(`/api/v1/workspaces/${owner.workspaceId}/properties/${property.id}`)
+        .set(...authHeader(owner.accessToken))
+        .send({ price: 222222 })
+        .expect(200);
+
+      expect(response.body.price).toBe(222222);
+      expect(response.body.privateDetails.internalNotes).toBe('Keep me');
+      expect(response.body.privateDetails.commissionNotes).toBe('Also keep me');
+    });
+
+    it('intentionally clearing internalNotes/commissionNotes (empty string) persists as cleared', async () => {
+      const owner = await registerVerifiedCompanyOwner(testApp);
+      const property = await createProperty(testApp, owner.workspaceId, owner.accessToken, {
+        privateDetails: { internalNotes: 'Original notes', commissionNotes: 'Original split' },
+      });
+
+      const cleared = await request(testApp.app.getHttpServer())
+        .patch(`/api/v1/workspaces/${owner.workspaceId}/properties/${property.id}`)
+        .set(...authHeader(owner.accessToken))
+        .send({ privateDetails: { internalNotes: '', commissionNotes: '' } })
+        .expect(200);
+
+      expect(cleared.body.privateDetails.internalNotes).toBe('');
+      expect(cleared.body.privateDetails.commissionNotes).toBe('');
+
+      const fetched = await request(testApp.app.getHttpServer())
+        .get(`/api/v1/workspaces/${owner.workspaceId}/properties/${property.id}`)
+        .set(...authHeader(owner.accessToken))
+        .expect(200);
+      expect(fetched.body.privateDetails.internalNotes).toBe('');
+      expect(fetched.body.privateDetails.commissionNotes).toBe('');
+    });
+  });
 });
