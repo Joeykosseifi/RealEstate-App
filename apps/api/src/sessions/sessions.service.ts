@@ -165,6 +165,27 @@ export class SessionsService {
     };
   }
 
+  /**
+   * Whether `sessionId` still refers to a live (not revoked, not
+   * expired) session — checked on every authenticated request (see
+   * JwtStrategy) so that revoking a session (logout, password reset)
+   * takes effect immediately, rather than only once the already-issued
+   * short-lived access token's own TTL naturally expires. A revoked or
+   * expired session's own access token must never continue to work in
+   * the meantime, even though the access token's signature and
+   * expiration are otherwise still valid.
+   */
+  async isActive(sessionId: string): Promise<boolean> {
+    const session = await this.prisma.userSession.findUnique({
+      where: { id: sessionId },
+      select: { revokedAt: true, expiresAt: true },
+    });
+    if (!session) {
+      return false;
+    }
+    return session.revokedAt === null && session.expiresAt.getTime() > Date.now();
+  }
+
   async revokeById(sessionId: string): Promise<void> {
     await this.prisma.userSession
       .update({ where: { id: sessionId }, data: { revokedAt: new Date() } })

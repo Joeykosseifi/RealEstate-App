@@ -45,9 +45,15 @@ export interface CreatePropertyInput {
   description?: string;
   price: number;
   currency: string;
-  bedrooms?: number;
-  bathrooms?: number;
-  areaSqm?: number;
+  /**
+   * `number | null` only matters for `updateProperty` (a `Partial<CreatePropertyInput>`):
+   * omitting the key leaves the stored value unchanged, `null` explicitly
+   * clears it — see EditPropertyScreen. `createProperty` never sends `null`
+   * here since there's no prior value to preserve or clear.
+   */
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+  areaSqm?: number | null;
   floor?: number;
   totalFloors?: number;
   yearBuilt?: number;
@@ -63,7 +69,7 @@ export interface CreatePropertyInput {
     googlePlaceId?: string;
     locationSource?: string;
   };
-  owners?: { fullName: string; phone?: string; email?: string; notes?: string }[];
+  owners?: { fullName: string; phone?: string; email?: string; whatsappPhone?: string; notes?: string }[];
   privateDetails?: { internalNotes?: string; commissionNotes?: string };
 }
 

@@ -94,7 +94,7 @@ describe('Auth — password reset', () => {
       .expect(400);
   });
 
-  it('35. existing sessions are revoked after a password reset (documented policy)', async () => {
+  it('35. existing sessions — and their access tokens — are revoked immediately after a password reset', async () => {
     const user = await registerVerifiedAgent(testApp);
 
     // The refreshToken from registerVerifiedAgent's login is a live session.
@@ -114,9 +114,14 @@ describe('Auth — password reset', () => {
       .send({ refreshToken: user.refreshToken })
       .expect(401);
 
+    // The access token's signature and expiry are still technically
+    // valid, but JwtStrategy also checks the session it names on every
+    // request — a password reset revokes that session immediately, so
+    // the access token must stop working right away too, not only once
+    // it separately expires on its own short TTL.
     await request(testApp.app.getHttpServer())
       .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${user.accessToken}`)
-      .expect(200); // access token itself is still valid until it expires — only the session/refresh is revoked.
+      .expect(401);
   });
 });
