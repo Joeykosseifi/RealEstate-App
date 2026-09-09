@@ -13,7 +13,14 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-realestate}']
+      # -d is required: pg_isready defaults to a database named after -U
+      # when -d is omitted, so without it this repeatedly probed a
+      # nonexistent "realestate" database (matching POSTGRES_USER)
+      # instead of the real POSTGRES_DB (realestate_dev), logging
+      # "FATAL: database "realestate" does not exist" every interval
+      # even though the server itself — and the app's own /health
+      # endpoint, which connects via DATABASE_URL/Prisma — were fine.
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-realestate} -d ${POSTGRES_DB:-realestate_dev}']
       interval: 5s
       timeout: 5s
       retries: 10

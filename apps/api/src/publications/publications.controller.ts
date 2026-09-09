@@ -68,6 +68,7 @@ export class PublicationsController {
       workspaceContext.workspaceId,
       propertyId,
       user.userId,
+      Boolean(user.user.emailVerifiedAt) && Boolean(user.user.phoneVerifiedAt),
     );
   }
 

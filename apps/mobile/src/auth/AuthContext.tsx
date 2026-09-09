@@ -9,6 +9,11 @@ import {
 } from '../api/auth';
 import { clearTokens, getStoredAccessToken, storeTokens } from '../api/client';
 import type { AuthUser, WorkspaceSummary } from '../api/types';
+import {
+  clearVerificationSkipped,
+  hasSkippedVerification,
+  markVerificationSkipped,
+} from './verificationSkip';
 
 interface AuthState {
   status: 'loading' | 'signed-out' | 'signed-in';
@@ -18,7 +23,7 @@ interface AuthState {
   currentWorkspace: WorkspaceSummary | null;
   /** The caller's resolved permission set for `currentWorkspace` — drives permission-gated UI (e.g. hiding "Archive" without `client.archive`). Empty until resolved. */
   permissions: Set<string>;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<AuthUser>;
   logout: () => Promise<void>;
   selectWorkspace: (workspace: WorkspaceSummary) => void;
   /**
@@ -29,6 +34,16 @@ interface AuthState {
    * become visible without asking the user to sign in again.
    */
   refreshSession: () => Promise<void>;
+  /**
+   * True once this signed-in user has explicitly chosen "Verify Later".
+   * Client-side-only (see `verificationSkip.ts`) — never changes
+   * `accountStatus`/`emailVerifiedAt`/`phoneVerifiedAt` on the backend,
+   * and never implies a feature that genuinely requires a verified
+   * identity (see PublicationsService.submit) is unlocked.
+   */
+  verificationSkipped: boolean;
+  /** Records the user's "Verify Later" choice locally so `resolveRootRoute` lets them into the app. */
+  skipVerification: (userId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -39,6 +54,17 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [currentWorkspace, setCurrentWorkspace] = useState<WorkspaceSummary | null>(null);
   const [permissions, setPermissions] = useState<Set<string>>(new Set());
+  const [verificationSkipped, setVerificationSkipped] = useState(false);
+
+  /** Reads this user's stored "Verify Later" choice and clears it once the account is fully ACTIVE (no reason to keep it around). */
+  const syncVerificationSkipped = useCallback(async (me: AuthUser) => {
+    if (me.accountStatus === 'ACTIVE') {
+      await clearVerificationSkipped(me.id);
+      setVerificationSkipped(false);
+      return;
+    }
+    setVerificationSkipped(await hasSkippedVerification(me.id));
+  }, []);
 
   const loadSession = useCallback(async () => {
     const token = await getStoredAccessToken();
@@ -51,6 +77,7 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
       setUser(me);
       setWorkspaces(myWorkspaces);
       setCurrentWorkspace(myWorkspaces[0] ?? null);
+      await syncVerificationSkipped(me);
       setStatus('signed-in');
     } catch {
       // Expired/invalid token — see docs/API.md "Mobile session handling":
@@ -59,7 +86,7 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
       await clearTokens();
       setStatus('signed-out');
     }
-  }, []);
+  }, [syncVerificationSkipped]);
 
   useEffect(() => {
     void loadSession();
@@ -90,14 +117,24 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
     };
   }, [currentWorkspace]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const { tokens } = await loginRequest(email, password);
-    await storeTokens(tokens.accessToken, tokens.refreshToken);
-    const [me, myWorkspaces] = await Promise.all([getCurrentUser(), listWorkspaces()]);
-    setUser(me);
-    setWorkspaces(myWorkspaces);
-    setCurrentWorkspace(myWorkspaces[0] ?? null);
-    setStatus('signed-in');
+  const login = useCallback(
+    async (email: string, password: string): Promise<AuthUser> => {
+      const { tokens } = await loginRequest(email, password);
+      await storeTokens(tokens.accessToken, tokens.refreshToken);
+      const [me, myWorkspaces] = await Promise.all([getCurrentUser(), listWorkspaces()]);
+      setUser(me);
+      setWorkspaces(myWorkspaces);
+      setCurrentWorkspace(myWorkspaces[0] ?? null);
+      await syncVerificationSkipped(me);
+      setStatus('signed-in');
+      return me;
+    },
+    [syncVerificationSkipped],
+  );
+
+  const skipVerification = useCallback(async (userId: string) => {
+    await markVerificationSkipped(userId);
+    setVerificationSkipped(true);
   }, []);
 
   const logout = useCallback(async () => {
@@ -128,8 +165,21 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
       logout,
       selectWorkspace: setCurrentWorkspace,
       refreshSession: loadSession,
+      verificationSkipped,
+      skipVerification,
     }),
-    [status, user, workspaces, currentWorkspace, permissions, login, logout, loadSession],
+    [
+      status,
+      user,
+      workspaces,
+      currentWorkspace,
+      permissions,
+      login,
+      logout,
+      loadSession,
+      verificationSkipped,
+      skipVerification,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -302,6 +303,22 @@ export class PublicationsService {
     return this.toDetail(publication);
   }
 
+  /**
+   * The one action gated on real identity verification (see
+   * docs/PRODUCT.md "Verify Later" / AccountActivationService): an
+   * unverified account may sign in and use the rest of the app (there's
+   * a real workspace from registration onward — see AuthService.register)
+   * but must not put a listing — and the contact info attached to it —
+   * in front of the public until email + phone are both verified.
+   */
+  private assertActorVerified(actorVerified: boolean): void {
+    if (!actorVerified) {
+      throw new ForbiddenException(
+        'Verify your email and phone number before publishing a property to the public marketplace.',
+      );
+    }
+  }
+
   private assertSubmissionEligible(
     property: Awaited<ReturnType<PublicationsService['findPropertyOrThrow']>>,
     version: NonNullable<PublicationWithVersions['latestVersion']>,
@@ -347,6 +364,7 @@ export class PublicationsService {
     workspaceId: string,
     propertyId: string,
     actorUserId: string,
+    actorVerified: boolean,
   ): Promise<PublicationDetail> {
     const property = await this.findPropertyOrThrow(workspaceId, propertyId);
     const publication = await this.prisma.propertyPublication.findUnique({
@@ -364,6 +382,7 @@ export class PublicationsService {
       );
     }
 
+    this.assertActorVerified(actorVerified);
     this.assertSubmissionEligible(property, publication.latestVersion);
 
     const now = new Date();

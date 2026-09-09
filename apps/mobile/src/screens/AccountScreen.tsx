@@ -8,6 +8,7 @@ import { useAuth } from '../auth/AuthContext';
 import { getWorkspaceDetail, requestPasswordReset, updateWorkspaceContact } from '../api/auth';
 import { ApiError } from '../api/client';
 import type { WorkspaceSummary } from '../api/types';
+import { VerificationForm } from './auth/VerificationScreen';
 import { Avatar, Button, Card, SectionHeader, TextField, confirmDestructive } from '../components/ui';
 import { colors, radii, spacing, typography } from '../theme';
 
@@ -23,11 +24,14 @@ import { colors, radii, spacing, typography } from '../theme';
  * existed before this pass — only the presentation changed.
  */
 export function AccountScreen(): React.JSX.Element {
-  const { user, workspaces, currentWorkspace, permissions, selectWorkspace, logout } = useAuth();
+  const { user, workspaces, currentWorkspace, permissions, selectWorkspace, logout, refreshSession } =
+    useAuth();
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
   const isProfessional = user?.accountType !== 'CLIENT';
   const canEditContact = permissions.has('workspace.update');
+  const [showVerification, setShowVerification] = useState(false);
+  const needsVerification = Boolean(user) && (!user?.emailVerifiedAt || !user?.phoneVerifiedAt);
 
   const [contactPhone, setContactPhone] = useState('');
   const [contactEmail, setContactEmail] = useState('');
@@ -104,6 +108,26 @@ export function AccountScreen(): React.JSX.Element {
 
   const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ');
 
+  if (showVerification && user) {
+    return (
+      <View style={styles.container}>
+        {isFocused ? <StatusBar style="light" /> : null}
+        <VerificationForm
+          email={user.email}
+          phone={user.phone}
+          initialEmailVerified={Boolean(user.emailVerifiedAt)}
+          initialPhoneVerified={Boolean(user.phoneVerifiedAt)}
+          onVerified={async () => {
+            await refreshSession();
+            setShowVerification(false);
+          }}
+          onSkip={async () => setShowVerification(false)}
+          onBack={() => setShowVerification(false)}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {isFocused ? <StatusBar style="light" /> : null}
@@ -116,6 +140,25 @@ export function AccountScreen(): React.JSX.Element {
         </View>
 
         <View style={styles.body}>
+          {needsVerification && (
+            <View style={styles.section}>
+              <SectionHeader title="Verification" />
+              <Card style={styles.verificationCard}>
+                <Text style={typography.body}>
+                  Your email{!user?.emailVerifiedAt ? ' (not verified)' : ''} and phone
+                  {!user?.phoneVerifiedAt ? ' (not verified)' : ''} help protect your account and are
+                  required before publishing a property to the public marketplace.
+                </Text>
+                <Button
+                  label="Complete Verification"
+                  size="sm"
+                  onPress={() => setShowVerification(true)}
+                  style={styles.verificationButton}
+                />
+              </Card>
+            </View>
+          )}
+
           {isProfessional && workspaces.length > 0 && (
             <View style={styles.section}>
               <SectionHeader title="Workspace" />
@@ -204,6 +247,8 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: spacing.lg, marginTop: spacing.lg },
   section: { marginBottom: spacing.xl },
   hintSpacing: { marginBottom: spacing.smd },
+  verificationCard: { gap: spacing.smd },
+  verificationButton: { alignSelf: 'flex-start' },
   flex1: { flex: 1 },
   workspaceRow: {
     flexDirection: 'row',

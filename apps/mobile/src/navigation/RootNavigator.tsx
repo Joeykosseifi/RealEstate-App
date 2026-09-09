@@ -59,8 +59,8 @@ function IndeterminateLoadingBar(): React.JSX.Element {
  * Milestone 6).
  */
 export function RootNavigator(): React.JSX.Element {
-  const { status, user, refreshSession, logout } = useAuth();
-  const route = resolveRootRoute({ status, accountStatus: user?.accountStatus });
+  const { status, user, refreshSession, logout, verificationSkipped, skipVerification } = useAuth();
+  const route = resolveRootRoute({ status, accountStatus: user?.accountStatus, verificationSkipped });
   const insets = useSafeAreaInsets();
 
   if (route === 'loading') {
@@ -92,6 +92,7 @@ export function RootNavigator(): React.JSX.Element {
           initialEmailVerified={Boolean(user.emailVerifiedAt)}
           initialPhoneVerified={Boolean(user.phoneVerifiedAt)}
           onVerified={refreshSession}
+          onSkip={() => skipVerification(user.id)}
           onSignOut={() => void logout()}
         />
       ) : (

@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import type { Prisma, User } from '@prisma/client';
+import type { User } from '@prisma/client';
 import type { ApiEnv } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -20,7 +20,7 @@ import {
 } from '../sessions/sessions.service';
 import { EmailVerificationService } from '../verification/email-verification.service';
 import { PhoneVerificationService } from '../verification/phone-verification.service';
-import type { PendingCompanyProfile } from '../workspaces/workspaces.service';
+import { WorkspacesService, type PendingCompanyProfile } from '../workspaces/workspaces.service';
 import type { AuthTokens, AuthUser } from '@real-estate/types';
 import type { RegisterClientDto } from './dto/register-client.dto';
 import type { RegisterAgentDto } from './dto/register-agent.dto';
@@ -55,6 +55,7 @@ export class AuthService {
     private readonly sessions: SessionsService,
     private readonly emailVerification: EmailVerificationService,
     private readonly phoneVerification: PhoneVerificationService,
+    private readonly workspaces: WorkspacesService,
     private readonly audit: AuditService,
     private readonly configService: ConfigService<ApiEnv, true>,
   ) {}
@@ -87,6 +88,18 @@ export class AuthService {
     return this.register(dto, 'COMPANY', profile, ipAddress);
   }
 
+  /**
+   * A workspace/company is created immediately at registration — in the
+   * same transaction as the User row — rather than waiting for email +
+   * phone verification. Verification gates specific features (see
+   * PublicationsService.submit for the one that matters: publishing a
+   * listing to the public marketplace), never the account's ability to
+   * sign in and use the app at all — see JwtStrategy and
+   * resolveInitialRoute.ts for the same principle applied elsewhere.
+   * AccountActivationService.activateIfVerified now only flips
+   * accountStatus to ACTIVE once both checks pass; it no longer creates
+   * anything, since it already exists by then.
+   */
   private async register(
     dto: RegisterInput,
     accountType: User['accountType'],
@@ -99,20 +112,36 @@ export class AuthService {
 
     let user: User;
     try {
-      user = await this.prisma.user.create({
-        data: {
-          firstName: dto.firstName.trim(),
-          lastName: dto.lastName.trim(),
-          email,
-          phone,
-          passwordHash,
-          accountType,
-          accountStatus: 'PENDING_VERIFICATION',
-          termsAcceptedAt: new Date(),
-          pendingCompanyProfile:
-            (pendingCompanyProfile as unknown as Prisma.InputJsonValue) ??
-            undefined,
-        },
+      user = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({
+          data: {
+            firstName: dto.firstName.trim(),
+            lastName: dto.lastName.trim(),
+            email,
+            phone,
+            passwordHash,
+            accountType,
+            accountStatus: 'PENDING_VERIFICATION',
+            termsAcceptedAt: new Date(),
+          },
+        });
+
+        if (accountType === 'AGENT') {
+          await this.workspaces.ensurePersonalWorkspace(
+            tx,
+            created.id,
+            `${created.firstName} ${created.lastName}`.trim(),
+          );
+        } else if (accountType === 'COMPANY' && pendingCompanyProfile) {
+          await this.workspaces.createCompanyWithWorkspace(
+            tx,
+            created.id,
+            pendingCompanyProfile,
+          );
+        }
+        // CLIENT: no workspace — a marketplace-only account never has one.
+
+        return created;
       });
     } catch (error) {
       if (isUniqueConstraintViolation(error, 'email')) {

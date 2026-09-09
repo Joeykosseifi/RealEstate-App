@@ -1,25 +1,26 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import type { PendingCompanyProfile } from '../workspaces/workspaces.service';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { WorkspacesService } from '../workspaces/workspaces.service';
 
 /**
- * Runs once both email and phone are verified. Exactly-once semantics
- * under concurrency (two verification calls racing each other) are
- * guaranteed by taking a row lock (`SELECT ... FOR UPDATE`) on the user
- * before deciding whether to activate — the second concurrent caller
- * blocks until the first commits, then observes accountStatus already
- * ACTIVE and no-ops. See docs/DATABASE.md "Activation & idempotency".
+ * Runs once both email and phone are verified. A workspace/company (for
+ * AGENT/COMPANY accounts) is created immediately at registration — see
+ * AuthService.register — not here, since verification gates specific
+ * features (see PublicationsService.submit), never the account's
+ * ability to sign in and use the app at all. So this is now a pure
+ * status transition: PENDING_VERIFICATION -> ACTIVE.
+ *
+ * Exactly-once semantics under concurrency (two verification calls
+ * racing each other) are guaranteed by taking a row lock
+ * (`SELECT ... FOR UPDATE`) on the user before deciding whether to
+ * activate — the second concurrent caller blocks until the first
+ * commits, then observes accountStatus already ACTIVE and no-ops. See
+ * docs/DATABASE.md "Activation & idempotency".
  */
 @Injectable()
 export class AccountActivationService {
-  private readonly logger = new Logger(AccountActivationService.name);
-
   constructor(
     private readonly prisma: PrismaService,
-    private readonly workspaces: WorkspacesService,
     private readonly audit: AuditService,
   ) {}
 
@@ -40,31 +41,9 @@ export class AccountActivationService {
         return;
       }
 
-      if (user.accountType === 'AGENT') {
-        await this.workspaces.ensurePersonalWorkspace(
-          tx,
-          user.id,
-          `${user.firstName} ${user.lastName}`.trim(),
-        );
-      } else if (user.accountType === 'COMPANY') {
-        const profile =
-          user.pendingCompanyProfile as PendingCompanyProfile | null;
-        if (!profile) {
-          this.logger.error(
-            `User ${user.id} is type COMPANY but has no pendingCompanyProfile`,
-          );
-          return;
-        }
-        await this.workspaces.createCompanyWithWorkspace(tx, user.id, profile);
-      }
-      // CLIENT: no workspace is created.
-
       await tx.user.update({
         where: { id: user.id },
-        data: {
-          accountStatus: 'ACTIVE',
-          pendingCompanyProfile: Prisma.JsonNull,
-        },
+        data: { accountStatus: 'ACTIVE' },
       });
 
       await this.audit.log(

@@ -12,6 +12,7 @@ import { SessionsModule } from '../sessions/sessions.module';
 import { VerificationModule } from '../verification/verification.module';
 import { PasswordResetModule } from '../password-reset/password-reset.module';
 import { RateLimitModule } from '../common/rate-limit/rate-limit.module';
+import { WorkspacesModule } from '../workspaces/workspaces.module';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -24,6 +25,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     VerificationModule,
     PasswordResetModule,
     RateLimitModule,
+    WorkspacesModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [NestConfigModule],

@@ -89,15 +89,33 @@ since Nest defaults `POST` to `201`).
 
 ### Registration → activation flow
 
-Registration never activates an account by itself. For all three account
-types: `register/*` → verify email (`email/verify`) → verify phone
-(`phone/verify`) → the *second* of those two calls to complete triggers
-activation (`AccountActivationService`), which flips `accountStatus` to
-`ACTIVE` and, for AGENT/COMPANY, creates the workspace described in
-`docs/PERMISSIONS.md`. Order between email and phone doesn't matter.
-`PENDING_VERIFICATION` accounts can already log in — verification gates
-specific product features, not authentication itself; only
-`SUSPENDED`/`DEACTIVATED` block login.
+For AGENT/COMPANY, the workspace (personal workspace, or company +
+workspace) described in `docs/PERMISSIONS.md` is created **immediately
+at registration** — in the same transaction as the `User` row — not
+deferred until verification. Registration never activates an account by
+itself, though: for all three account types, `accountStatus` starts
+`PENDING_VERIFICATION` and only the *second* of the two verification
+calls to complete (`email/verify`, `phone/verify`, order doesn't matter)
+triggers activation (`AccountActivationService.activateIfVerified`),
+which is now a pure status flip to `ACTIVE` (no side effects — the
+workspace already exists).
+
+`PENDING_VERIFICATION` accounts can already log in and use the app —
+verification gates specific product features, not authentication or
+browsing itself; only `SUSPENDED`/`DEACTIVATED` block login. The one
+feature that does require full verification today is submitting a
+property to the public marketplace (`PublicationsService.submit`
+rejects with 403 unless the actor's `emailVerifiedAt` and
+`phoneVerifiedAt` are both set) — an unverified identity must not put a
+listing, and the contact info attached to it, in front of the public.
+
+On mobile, a user can explicitly choose "Verify Later" on the
+verification screen rather than finish then and there; this is a
+client-side-only navigation preference (`AuthContext.skipVerification`,
+`apps/mobile/src/auth/verificationSkip.ts`) — it never touches the
+backend and never fakes `emailVerifiedAt`/`phoneVerifiedAt`/
+`accountStatus`. The user can return to `AccountScreen` at any time to
+finish verification.
 
 ### Mobile registration & onboarding (Milestone 6.1)
 

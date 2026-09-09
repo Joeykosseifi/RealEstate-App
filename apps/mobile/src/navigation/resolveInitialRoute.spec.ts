@@ -19,8 +19,26 @@ describe('resolveRootRoute', () => {
     expect(resolveRootRoute({ status: 'signed-in', accountStatus: 'ACTIVE' })).toBe('app');
   });
 
-  it('never leaves a PENDING_VERIFICATION account in the main app', () => {
+  it('by default, never leaves a PENDING_VERIFICATION account in the main app', () => {
     const route = resolveRootRoute({ status: 'signed-in', accountStatus: 'PENDING_VERIFICATION' });
     expect(route).not.toBe('app');
+  });
+
+  it('an account that has explicitly skipped verification ("Verify Later") can reach the main app', () => {
+    const route = resolveRootRoute({
+      status: 'signed-in',
+      accountStatus: 'PENDING_VERIFICATION',
+      verificationSkipped: true,
+    });
+    expect(route).toBe('app');
+  });
+
+  it('skipping verification does not affect a fully ACTIVE account (no-op, stays in app either way)', () => {
+    expect(
+      resolveRootRoute({ status: 'signed-in', accountStatus: 'ACTIVE', verificationSkipped: true }),
+    ).toBe('app');
+    expect(
+      resolveRootRoute({ status: 'signed-in', accountStatus: 'ACTIVE', verificationSkipped: false }),
+    ).toBe('app');
   });
 });
