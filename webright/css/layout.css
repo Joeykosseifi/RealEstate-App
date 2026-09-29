@@ -1,0 +1,166 @@
+/* ==========================================================================
+   Layout — containers, sections, section themes and grids.
+   ========================================================================== */
+
+.container {
+  width: 100%;
+  max-width: calc(var(--container-max) + var(--gutter) * 2);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+.container--narrow {
+  max-width: calc(var(--container-narrow) + var(--gutter) * 2);
+}
+
+/* ---- Sections ---- */
+.section {
+  position: relative;
+  padding-block: var(--section-pad);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.section--tight {
+  padding-block: var(--section-pad-sm);
+}
+
+.section--flush-top {
+  padding-top: 0;
+}
+
+.section + .section.section--continue {
+  padding-top: 0;
+}
+
+/* ---- Section themes ----
+   Each theme only remaps semantic tokens; components never hard-code
+   colours, so any component works on any theme. */
+.theme-light {
+  --surface: var(--color-off-white);
+  --surface-raised: var(--color-white);
+}
+
+.theme-white {
+  --surface: var(--color-white);
+  --surface-raised: var(--color-off-white);
+}
+
+.theme-dark,
+.theme-blue {
+  --surface: var(--color-midnight);
+  --surface-raised: var(--color-midnight-raised);
+  --text: #cbd5e1;
+  --text-strong: var(--color-white);
+  --text-muted: var(--color-slate-light);
+  --text-subtle: var(--color-slate-light);
+  --line: var(--color-line-dark);
+  --line-strong: var(--color-line-dark-strong);
+  --accent: var(--color-cyan);
+  --accent-text: var(--color-cyan);
+  --focus-ring: var(--color-cyan);
+  --error: var(--color-error-on-dark);
+  color-scheme: dark;
+}
+
+.theme-deep {
+  --surface: var(--color-midnight-deep);
+}
+
+.theme-blue {
+  --surface: var(--color-blue);
+  --surface-raised: var(--color-blue-strong);
+  /* White is the only text colour with AA contrast on Electric Blue. */
+  --text: var(--color-white);
+  --text-muted: var(--color-white);
+  --text-subtle: var(--color-white);
+  --line: rgb(255 255 255 / 0.24);
+  --line-strong: rgb(255 255 255 / 0.45);
+  --accent: var(--color-white);
+  --accent-text: var(--color-white);
+  --focus-ring: var(--color-white);
+}
+
+/* Theme surfaces need their own background when used outside .section. */
+.theme-dark,
+.theme-blue,
+.theme-light,
+.theme-white {
+  background-color: var(--surface);
+  color: var(--text);
+}
+
+/* ---- Section heading block ---- */
+.section-head {
+  display: grid;
+  gap: var(--space-5);
+  margin-bottom: clamp(2.5rem, 1.6rem + 3.6vw, 5rem);
+}
+
+.section-head--split {
+  grid-template-columns: 1fr;
+  align-items: end;
+}
+
+@media (min-width: 64rem) {
+  .section-head--split {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    column-gap: var(--space-9);
+  }
+
+  .section-head--split .lead {
+    justify-self: end;
+    margin-bottom: 0.4em;
+  }
+}
+
+/* ---- Grids ---- */
+.grid {
+  display: grid;
+  gap: var(--grid-gap);
+}
+
+.grid-2 {
+  display: grid;
+  gap: var(--grid-gap);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+}
+
+.grid-3 {
+  display: grid;
+  gap: var(--grid-gap);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+}
+
+.grid-12 {
+  display: grid;
+  gap: var(--grid-gap);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+.stack > * + * {
+  margin-top: var(--stack);
+}
+
+.stack-sm > * + * {
+  margin-top: var(--space-4);
+}
+
+.cluster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+/* ---- Rule lines used as structural "alignment" guides ---- */
+.rule {
+  height: 1px;
+  background: var(--line);
+  border: 0;
+}
+
+.rule--accent {
+  height: 2px;
+  background: var(--gradient-brand-h);
+}

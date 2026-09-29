@@ -1,0 +1,17 @@
+<ul class="channels">
+  <li class="channel">
+    <span class="channel__label">WhatsApp</span>
+    <a class="channel__value" href="{{whatsapp.url}}" target="_blank" rel="noopener noreferrer" data-track="whatsapp_click" data-track-location="contact_page">{{whatsapp.display}}<span class="visually-hidden"> — message WEBRIGHT on WhatsApp (opens in a new tab)</span></a>
+    <span class="channel__arrow" aria-hidden="true">→</span>
+  </li>
+  <li class="channel">
+    <span class="channel__label">Instagram</span>
+    <a class="channel__value" href="{{instagram.url}}" target="_blank" rel="noopener noreferrer" data-track="instagram_click" data-track-location="contact_page">{{instagram.handle}}<span class="visually-hidden"> — WEBRIGHT on Instagram (opens in a new tab)</span></a>
+    <span class="channel__arrow" aria-hidden="true">→</span>
+  </li>
+  {{#email}}<li class="channel">
+    <span class="channel__label">Email</span>
+    <a class="channel__value" href="mailto:{{email}}" data-track="email_click" data-track-location="contact_page">{{email}}</a>
+    <span class="channel__arrow" aria-hidden="true">→</span>
+  </li>{{/email}}
+</ul>

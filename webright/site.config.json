@@ -1,0 +1,19 @@
+{
+  "_readme": "Single source of truth for site-wide business details. After editing, run `node tools/sync.mjs` from the webright/ folder to update every page, sitemap.xml, robots.txt and js/config.js.",
+  "siteName": "WEBRIGHT",
+  "tagline": "Your digital presence. Done right.",
+  "siteUrl": "https://webright.example",
+  "siteUrlIsPlaceholder": true,
+  "email": null,
+  "whatsapp": {
+    "display": "+961 81 767 764",
+    "number": "96181767764"
+  },
+  "instagram": {
+    "handle": "@webright.lb",
+    "url": "https://www.instagram.com/webright.lb/"
+  },
+  "formEndpoint": null,
+  "copyrightYear": 2026,
+  "locale": "en"
+}

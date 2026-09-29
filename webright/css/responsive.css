@@ -1,0 +1,117 @@
+/* ==========================================================================
+   Responsive — cross-cutting breakpoint behaviour.
+   Component-level adaptations live next to their components; this file
+   holds the global switches (navigation mode, print, no-JS fallbacks).
+
+   Breakpoints (kept deliberately few):
+     < 30rem   (480px)   small phones
+     < 48rem   (768px)   phones / small tablets
+     < 62rem   (992px)   tablets — mobile navigation
+     ≥ 64rem   (1024px)  desktop layouts (multi-column compositions)
+   ========================================================================== */
+
+/* ---- Navigation mode switch ---- */
+@media (max-width: 61.99rem) {
+  .nav {
+    display: none;
+  }
+
+  .nav-toggle {
+    display: inline-flex;
+  }
+
+  .site-header__inner {
+    gap: var(--space-4);
+  }
+}
+
+@media (max-width: 35.99rem) {
+  .site-header__cta {
+    display: none;
+  }
+}
+
+/* Without JavaScript the menu dialog can't open, so on small screens the
+   primary links wrap beneath the logo instead of hiding behind a toggle. */
+@media (max-width: 61.99rem) {
+  html:not(.js) .site-header {
+    position: relative;
+    height: auto;
+  }
+
+  html:not(.js) .site-header__inner {
+    flex-wrap: wrap;
+    padding-block: var(--space-3);
+  }
+
+  html:not(.js) .nav {
+    display: block;
+    order: 3;
+    width: 100%;
+  }
+
+  html:not(.js) .nav__list {
+    flex-wrap: wrap;
+  }
+
+  html:not(.js) .nav__item--dropdown .dropdown {
+    display: none;
+  }
+
+  html:not(.js) .nav-toggle {
+    display: none;
+  }
+}
+
+/* ---- Touch devices: no hover-only affordances ---- */
+@media (hover: none) {
+  .svc-row:hover::before {
+    transform: scaleX(0);
+  }
+
+  .showcase__item.is-active .svc-row::before {
+    transform: scaleX(1);
+  }
+}
+
+/* ---- Print ---- */
+@media print {
+  .site-header,
+  .mobile-menu,
+  .cta-band,
+  .site-footer__nav,
+  .guides,
+  .hero__b,
+  .showcase__stage,
+  .brief__nav {
+    display: none !important;
+  }
+
+  body,
+  main,
+  .section,
+  .theme-dark,
+  .theme-blue {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  h1,
+  h2,
+  h3,
+  .hero__title,
+  .statement__to,
+  .oneteam__item {
+    color: #000 !important;
+  }
+
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  a[href^='http']::after {
+    content: ' (' attr(href) ')';
+    font-size: 0.8em;
+  }
+}
