@@ -21,14 +21,6 @@
   src: url('../assets/fonts/playfair-display-latin-italic-var.woff2') format('woff2');
 }
 
-@font-face {
-  font-family: 'Playfair Display';
-  font-style: normal;
-  font-weight: 400 600;
-  font-display: swap;
-  src: url('../assets/fonts/playfair-display-latin-var.woff2') format('woff2');
-}
-
 :root {
   /* ---- Core palette (brand) ---- */
   --color-midnight: #0b1220;

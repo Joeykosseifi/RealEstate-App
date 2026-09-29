@@ -18,7 +18,8 @@
  *   1. Replaces every partial block with the rendered partial.
  *   2. Rewrites the site origin everywhere in each page (canonical,
  *      Open Graph, JSON-LD) when `siteUrl` changes in the config.
- *   3. Regenerates sitemap.xml (skipping pages marked noindex),
+ *   3. Writes `formEndpoint` into the Start a Project form's action.
+ *   4. Regenerates sitemap.xml (skipping pages marked noindex),
  *      robots.txt and js/config.js.
  *
  * Partial template syntax (deliberately tiny):
@@ -79,7 +80,9 @@ function render(template, page) {
         const truthy = value !== null && value !== undefined && value !== '' && value !== false;
         return (type === '#') === truthy ? body : '';
       })
-      .replace(/\{\{current:([\w./-]+)\}\}/g, (_, key) => (matches(key) ? ' aria-current="page"' : ''))
+      .replace(/\{\{current:([\w./-]+)\}\}/g, (_, key) =>
+        matches(key) ? ' aria-current="page"' : '',
+      )
       .replace(/\{\{active:([\w./-]+)\}\}/g, (_, key) => (matches(key) ? ' is-active' : ''))
       .replace(/\{\{root\}\}/g, page.root)
       .replace(/\{\{home\}\}/g, page.home)
@@ -129,6 +132,13 @@ for (const file of pages) {
   );
   if (previous && previous !== origin) html = html.split(previous).join(origin);
 
+  // Point the project form at the configured endpoint so it also works
+  // without JavaScript once a backend exists.
+  html = html.replace(
+    /(<form[^>]*id="project-form"[^>]*action=")[^"]*(")/,
+    (_, open, close) => `${open}${config.formEndpoint || ''}${close}`,
+  );
+
   writeFileSync(file, html);
 
   const noindex = /<meta name="robots" content="[^"]*noindex/.test(html);
@@ -163,23 +173,34 @@ writeFileSync(
  * Public, client-side values only. Never put secrets or private API keys here:
  * everything in this file is downloaded by every visitor.
  */
-export const config = Object.freeze(${JSON.stringify(
-    {
-      siteName: config.siteName,
-      siteUrl: origin,
-      email: config.email,
-      whatsappNumber: config.whatsapp.number,
-      whatsappDisplay: config.whatsapp.display,
-      instagramUrl: config.instagram.url,
-      formEndpoint: config.formEndpoint,
-    },
-    null,
-    2,
-  )});
+export const config = Object.freeze({
+${Object.entries({
+  siteName: config.siteName,
+  siteUrl: origin,
+  email: config.email,
+  whatsappNumber: config.whatsapp.number,
+  whatsappDisplay: config.whatsapp.display,
+  instagramUrl: config.instagram.url,
+  formEndpoint: config.formEndpoint,
+})
+  .map(([key, value]) => `  ${key}: ${jsLiteral(value)},`)
+  .join('\n')}
+});
 `,
 );
 
-console.log(`Synced ${pages.length} pages · ${sitemapEntries.length} in sitemap · origin ${origin}`);
+// Prettier-compatible literal (single quotes) so the generated file stays lint-clean.
+function jsLiteral(value) {
+  if (value === null || value === undefined) return 'null';
+  if (typeof value !== 'string') return JSON.stringify(value);
+  return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+}
+
+console.log(
+  `Synced ${pages.length} pages · ${sitemapEntries.length} in sitemap · origin ${origin}`,
+);
 if (config.siteUrlIsPlaceholder) {
-  console.warn('⚠ siteUrl is still a placeholder — set the real domain in site.config.json before launch.');
+  console.warn(
+    '⚠ siteUrl is still a placeholder — set the real domain in site.config.json before launch.',
+  );
 }

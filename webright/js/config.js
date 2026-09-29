@@ -4,11 +4,11 @@
  * everything in this file is downloaded by every visitor.
  */
 export const config = Object.freeze({
-  "siteName": "WEBRIGHT",
-  "siteUrl": "https://webright.example",
-  "email": null,
-  "whatsappNumber": "96181767764",
-  "whatsappDisplay": "+961 81 767 764",
-  "instagramUrl": "https://www.instagram.com/webright.lb/",
-  "formEndpoint": null
+  siteName: 'WEBRIGHT',
+  siteUrl: 'https://webright.example',
+  email: null,
+  whatsappNumber: '96181767764',
+  whatsappDisplay: '+961 81 767 764',
+  instagramUrl: 'https://www.instagram.com/webright.lb/',
+  formEndpoint: null,
 });

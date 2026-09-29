@@ -2282,3 +2282,45 @@ textarea.field__input {
   height: 1px;
   overflow: hidden;
 }
+
+/* --------------------------------------------------------------------------
+   Load-time alignment for above-the-fold content.
+   CSS-only and transform-only: text is visible from the very first paint
+   (good for LCP and for visitors without JS), it just settles into place.
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: no-preference) {
+  .load-up,
+  .load-left,
+  .load-right {
+    animation: load-align var(--dur-slower) var(--ease-out) both;
+    animation-delay: var(--delay, 0ms);
+  }
+
+  .load-up {
+    --from-x: 0px;
+    --from-y: calc(var(--align-distance) * 0.6);
+  }
+
+  .load-left {
+    --from-x: calc(var(--align-distance) * -1);
+    --from-y: 0px;
+  }
+
+  .load-right {
+    --from-x: var(--align-distance);
+    --from-y: 0px;
+  }
+}
+
+@keyframes load-align {
+  from {
+    transform: translate3d(var(--from-x), var(--from-y), 0);
+  }
+}
+
+/* Short team bio — add once real bios are supplied. */
+.member__bio {
+  margin-top: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}

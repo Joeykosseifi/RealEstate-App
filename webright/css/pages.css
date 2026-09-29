@@ -2003,3 +2003,30 @@ html:not(.js) .brief__step + .brief__step {
 .honesty p {
   color: var(--text-muted);
 }
+
+.rail--spaced {
+  margin-top: var(--space-8);
+}
+
+.not-found {
+  position: relative;
+  overflow: hidden;
+  padding-block: var(--section-pad-sm);
+}
+
+/* Brief: on small screens the form comes first; the step list is replaced
+   by the in-form progress bar. With JS the progress bar also shows the
+   step number, so the per-step kicker would repeat it. */
+@media (max-width: 63.99rem) {
+  .brief-aside {
+    order: 2;
+  }
+
+  .js .brief-steps {
+    display: none;
+  }
+}
+
+.js .brief__kicker {
+  display: none;
+}
