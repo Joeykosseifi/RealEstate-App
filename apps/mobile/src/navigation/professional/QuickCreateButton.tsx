@@ -3,6 +3,9 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useNavigation, type NavigationProp } from '@react-navigation/native';
 import { colors, shadows } from '../../theme';
 import { ActionSheet, IconButton } from '../../components/ui';
+import { useAuth } from '../../auth/AuthContext';
+import { guardVerifiedAction, isAccountVerified } from '../../auth/accountVerification';
+import { useVerificationPrompt } from '../useVerificationPrompt';
 import type { ProfessionalTabParamList } from './ProfessionalTabs';
 
 /**
@@ -13,17 +16,30 @@ import type { ProfessionalTabParamList } from './ProfessionalTabs';
  * never navigates anywhere itself — `tabBarButton` intercepts the tab
  * press (see `ProfessionalTabs`) so this renders in place of a normal
  * tab icon/label.
+ *
+ * Also rendered in `PublicOnlyTabs` for unverified professionals: there
+ * it stays discoverable but shows the "Verification required" prompt
+ * instead of the create menu (the API rejects creation regardless).
  */
 export function QuickCreateButton(): React.JSX.Element {
   const navigation = useNavigation<NavigationProp<ProfessionalTabParamList>>();
+  const { user } = useAuth();
+  const verified = isAccountVerified(user);
+  const promptVerification = useVerificationPrompt();
   const [open, setOpen] = useState(false);
 
   return (
     <View style={styles.wrap} pointerEvents="box-none">
       <IconButton
         icon={<Text style={styles.plus}>+</Text>}
-        onPress={() => setOpen(true)}
-        accessibilityLabel="Quick create"
+        onPress={() =>
+          guardVerifiedAction(
+            verified,
+            () => setOpen(true),
+            () => promptVerification(),
+          )
+        }
+        accessibilityLabel={verified ? 'Quick create' : 'Add Property'}
         style={styles.button}
       />
       <ActionSheet

@@ -9,6 +9,7 @@ import {
 } from '../api/auth';
 import { clearTokens, getStoredAccessToken, storeTokens } from '../api/client';
 import type { AuthUser, WorkspaceSummary } from '../api/types';
+import { isAccountVerified } from './accountVerification';
 import {
   clearVerificationSkipped,
   hasSkippedVerification,
@@ -19,6 +20,8 @@ interface AuthState {
   status: 'loading' | 'signed-out' | 'signed-in';
   user: AuthUser | null;
   workspaces: WorkspaceSummary[];
+  /** Both email and phone verified (see accountVerification.ts) — the API's own requirement for any workspace access. */
+  isVerified: boolean;
   /** The workspace the Properties/Clients screens act in — the agent's own personal workspace, or the first company workspace they belong to. */
   currentWorkspace: WorkspaceSummary | null;
   /** The caller's resolved permission set for `currentWorkspace` — drives permission-gated UI (e.g. hiding "Archive" without `client.archive`). Empty until resolved. */
@@ -29,17 +32,16 @@ interface AuthState {
   /**
    * Re-fetches the current user + workspace list without a fresh login —
    * used once email + phone verification complete for an already-signed-in
-   * `PENDING_VERIFICATION` account (see `screens/auth/VerificationScreen`),
-   * so the newly-activated AGENT/COMPANY workspace and `accountStatus`
-   * become visible without asking the user to sign in again.
+   * account (see `screens/auth/VerifyAccountScreen`), so the workspace
+   * becomes reachable without asking the user to sign in again.
    */
   refreshSession: () => Promise<void>;
   /**
    * True once this signed-in user has explicitly chosen "Verify Later".
    * Client-side-only (see `verificationSkip.ts`) — never changes
    * `accountStatus`/`emailVerifiedAt`/`phoneVerifiedAt` on the backend,
-   * and never implies a feature that genuinely requires a verified
-   * identity (see PublicationsService.submit) is unlocked.
+   * and never unlocks anything: it only lets an unverified account into
+   * the public-only experience instead of forcing the verification screen.
    */
   verificationSkipped: boolean;
   /** Records the user's "Verify Later" choice locally so `resolveRootRoute` lets them into the app. */
@@ -56,15 +58,31 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
   const [permissions, setPermissions] = useState<Set<string>>(new Set());
   const [verificationSkipped, setVerificationSkipped] = useState(false);
 
-  /** Reads this user's stored "Verify Later" choice and clears it once the account is fully ACTIVE (no reason to keep it around). */
+  /** Reads this user's stored "Verify Later" choice and clears it once the account is verified (no reason to keep it around). */
   const syncVerificationSkipped = useCallback(async (me: AuthUser) => {
-    if (me.accountStatus === 'ACTIVE') {
+    if (isAccountVerified(me)) {
       await clearVerificationSkipped(me.id);
       setVerificationSkipped(false);
       return;
     }
     setVerificationSkipped(await hasSkippedVerification(me.id));
   }, []);
+
+  /**
+   * The API rejects `GET /workspaces` (and every workspace route) for an
+   * unverified account, so the list is only requested once verified;
+   * until then the app is public-only and has no current workspace.
+   */
+  const applyUser = useCallback(
+    async (me: AuthUser) => {
+      const myWorkspaces = isAccountVerified(me) ? await listWorkspaces() : [];
+      setUser(me);
+      setWorkspaces(myWorkspaces);
+      setCurrentWorkspace(myWorkspaces[0] ?? null);
+      await syncVerificationSkipped(me);
+    },
+    [syncVerificationSkipped],
+  );
 
   const loadSession = useCallback(async () => {
     const token = await getStoredAccessToken();
@@ -73,11 +91,7 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
       return;
     }
     try {
-      const [me, myWorkspaces] = await Promise.all([getCurrentUser(), listWorkspaces()]);
-      setUser(me);
-      setWorkspaces(myWorkspaces);
-      setCurrentWorkspace(myWorkspaces[0] ?? null);
-      await syncVerificationSkipped(me);
+      await applyUser(await getCurrentUser());
       setStatus('signed-in');
     } catch {
       // Expired/invalid token — see docs/API.md "Mobile session handling":
@@ -86,7 +100,7 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
       await clearTokens();
       setStatus('signed-out');
     }
-  }, [syncVerificationSkipped]);
+  }, [applyUser]);
 
   useEffect(() => {
     void loadSession();
@@ -121,15 +135,12 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
     async (email: string, password: string): Promise<AuthUser> => {
       const { tokens } = await loginRequest(email, password);
       await storeTokens(tokens.accessToken, tokens.refreshToken);
-      const [me, myWorkspaces] = await Promise.all([getCurrentUser(), listWorkspaces()]);
-      setUser(me);
-      setWorkspaces(myWorkspaces);
-      setCurrentWorkspace(myWorkspaces[0] ?? null);
-      await syncVerificationSkipped(me);
+      const me = await getCurrentUser();
+      await applyUser(me);
       setStatus('signed-in');
       return me;
     },
-    [syncVerificationSkipped],
+    [applyUser],
   );
 
   const skipVerification = useCallback(async (userId: string) => {
@@ -158,6 +169,7 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
     () => ({
       status,
       user,
+      isVerified: isAccountVerified(user),
       workspaces,
       currentWorkspace,
       permissions,

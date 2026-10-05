@@ -7,11 +7,15 @@ const mockCreateTransport = jest.fn(() => ({ sendMail: mockSendMail }));
 jest.mock('nodemailer', () => ({ createTransport: mockCreateTransport }));
 
 // Imported after the mock so SmtpMailProvider's own `import { createTransport } from 'nodemailer'` resolves to the mock above.
-// eslint-disable-next-line import/first
 import { SmtpMailProvider } from './smtp-mail.provider';
 
-function configFrom(values: Record<string, unknown>): ConfigService<ApiEnv, true> {
-  return { get: (key: string) => values[key] } as unknown as ConfigService<ApiEnv, true>;
+function configFrom(
+  values: Record<string, unknown>,
+): ConfigService<ApiEnv, true> {
+  return { get: (key: string) => values[key] } as unknown as ConfigService<
+    ApiEnv,
+    true
+  >;
 }
 
 const validConfig = {
@@ -37,10 +41,18 @@ describe('SmtpMailProvider', () => {
     mockSendMail.mockResolvedValue(undefined);
     const provider = new SmtpMailProvider(configFrom(validConfig));
 
-    await provider.send({ to: 'user@example.com', subject: 'Verify', text: 'code: 123456' });
+    await provider.send({
+      to: 'user@example.com',
+      subject: 'Verify',
+      text: 'code: 123456',
+    });
 
     expect(mockCreateTransport).toHaveBeenCalledWith(
-      expect.objectContaining({ host: 'smtp.example.com', port: 587, secure: false }),
+      expect.objectContaining({
+        host: 'smtp.example.com',
+        port: 587,
+        secure: false,
+      }),
     );
     expect(mockSendMail).toHaveBeenCalledWith({
       from: 'noreply@example.com',
@@ -52,16 +64,26 @@ describe('SmtpMailProvider', () => {
 
   it('falls back to SMTP_USER as the From address when SMTP_FROM is unset', async () => {
     mockSendMail.mockResolvedValue(undefined);
-    const provider = new SmtpMailProvider(configFrom({ ...validConfig, SMTP_FROM: undefined }));
+    const provider = new SmtpMailProvider(
+      configFrom({ ...validConfig, SMTP_FROM: undefined }),
+    );
 
-    await provider.send({ to: 'user@example.com', subject: 'Verify', text: 'x' });
+    await provider.send({
+      to: 'user@example.com',
+      subject: 'Verify',
+      text: 'x',
+    });
 
-    expect(mockSendMail).toHaveBeenCalledWith(expect.objectContaining({ from: 'apikey' }));
+    expect(mockSendMail).toHaveBeenCalledWith(
+      expect.objectContaining({ from: 'apikey' }),
+    );
   });
 
   it('never throws into the caller when delivery fails — logs instead (registration/resend must not fail on a transient SMTP error)', async () => {
     mockSendMail.mockRejectedValue(new Error('connection refused'));
-    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const errorSpy = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
     const provider = new SmtpMailProvider(configFrom(validConfig));
 
     await expect(

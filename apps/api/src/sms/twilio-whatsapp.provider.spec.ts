@@ -7,11 +7,15 @@ const mockTwilioFactory = jest.fn(() => ({ messages: { create: mockCreate } }));
 jest.mock('twilio', () => mockTwilioFactory);
 
 // Imported after the mock so TwilioWhatsAppProvider's own `import twilio from 'twilio'` resolves to the mock above.
-// eslint-disable-next-line import/first
 import { TwilioWhatsAppProvider } from './twilio-whatsapp.provider';
 
-function configFrom(values: Record<string, unknown>): ConfigService<ApiEnv, true> {
-  return { get: (key: string) => values[key] } as unknown as ConfigService<ApiEnv, true>;
+function configFrom(
+  values: Record<string, unknown>,
+): ConfigService<ApiEnv, true> {
+  return { get: (key: string) => values[key] } as unknown as ConfigService<
+    ApiEnv,
+    true
+  >;
 }
 
 const validConfig = {
@@ -27,7 +31,9 @@ describe('TwilioWhatsAppProvider', () => {
   });
 
   it('throws at construction when TWILIO_* config is missing — fails loudly at boot rather than silently dropping messages', () => {
-    expect(() => new TwilioWhatsAppProvider(configFrom({}))).toThrow(/TWILIO_ACCOUNT_SID/);
+    expect(() => new TwilioWhatsAppProvider(configFrom({}))).toThrow(
+      /TWILIO_ACCOUNT_SID/,
+    );
   });
 
   it('sends a WhatsApp message with the whatsapp: prefix on the recipient', async () => {
@@ -55,15 +61,21 @@ describe('TwilioWhatsAppProvider', () => {
 
     await provider.send('+15551234567', 'code');
 
-    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ from: 'whatsapp:+14155238886' }));
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ from: 'whatsapp:+14155238886' }),
+    );
   });
 
   it('never throws into the caller when delivery fails — logs instead (registration/resend must not fail on a transient Twilio error)', async () => {
     mockCreate.mockRejectedValue(new Error('twilio unavailable'));
-    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const errorSpy = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
     const provider = new TwilioWhatsAppProvider(configFrom(validConfig));
 
-    await expect(provider.send('+15551234567', 'code')).resolves.toBeUndefined();
+    await expect(
+      provider.send('+15551234567', 'code'),
+    ).resolves.toBeUndefined();
     expect(errorSpy).toHaveBeenCalled();
 
     errorSpy.mockRestore();

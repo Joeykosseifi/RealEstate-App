@@ -52,8 +52,10 @@ Authorization (Milestone 2+) remains a forward statement.
   every authenticated request, not just at login, so a mid-session
   suspension takes effect immediately rather than waiting out the
   token's TTL). `PENDING_VERIFICATION` accounts *can* authenticate — only
-  suspension/deactivation blocks auth; verification gates specific
-  product features, not login itself.
+  suspension/deactivation blocks auth. Until email *and* phone are
+  verified the account is public-only: every workspace route rejects it
+  server-side (`VerifiedAccountGuard`, see docs/PERMISSIONS.md
+  "Verified-account requirement").
 - **Password reset:** high-entropy token, hashed at rest, expiring
   (`PASSWORD_RESET_TTL_MINUTES`), one-time use. Successful reset revokes
   every existing session for that user (documented policy — see

@@ -9,7 +9,6 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import type {
   Paginated,
@@ -18,7 +17,7 @@ import type {
   WorkspaceRoleSummary,
   WorkspaceSummary,
 } from '@real-estate/types';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RequireVerifiedAccount } from '../auth/decorators/require-verified-account.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthenticatedRequestUser } from '../auth/auth.types';
 import { RequireWorkspacePermission } from '../authorization/require-workspace-permission.decorator';
@@ -46,7 +45,7 @@ export class WorkspacesController {
   ) {}
 
   @Get()
-  @UseGuards(JwtAuthGuard)
+  @RequireVerifiedAccount()
   async list(
     @CurrentUser() user: AuthenticatedRequestUser,
   ): Promise<WorkspaceSummary[]> {
@@ -108,8 +107,10 @@ export class WorkspacesController {
     return { id: membership.id };
   }
 
+  // Verification required: invitations are addressed by email, and an
+  // unverified account hasn't proven it owns that address.
   @Post(':id/invitations/accept')
-  @UseGuards(JwtAuthGuard)
+  @RequireVerifiedAccount()
   @HttpCode(HttpStatus.NO_CONTENT)
   async acceptInvitation(
     @Param('id') workspaceId: string,

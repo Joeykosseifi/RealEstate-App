@@ -11,9 +11,9 @@ export interface ResolveRootRouteInput {
    * the verification screen (see AuthContext.skipVerification) — a
    * client-side-only navigation preference, never a backend field. It
    * never changes `accountStatus`/`emailVerifiedAt`/`phoneVerifiedAt`,
-   * and any feature that genuinely requires a verified identity (see
-   * PublicationsService.submit) still checks the real backend state
-   * regardless of this flag.
+   * and only admits the account to the public-only experience (see
+   * `roleRouting.ts`) — the API still rejects every workspace route
+   * until it is really verified.
    */
   verificationSkipped?: boolean;
 }
@@ -23,12 +23,11 @@ export interface ResolveRootRouteInput {
  * specs stay `.ts`, never `.tsx`). A `PENDING_VERIFICATION` account is
  * signed in (the backend allows login before verification — see
  * docs/API.md "Registration → activation flow") and, since Milestone
- * "Verify Later", already has a real workspace from the moment it
- * registered (see AuthService.register) — verification gates specific
- * features, never the ability to browse the app. By default such an
- * account is still routed to the verification screen so it isn't
- * silently skipped; `verificationSkipped` is the one escape hatch, set
- * only by the user's own explicit choice.
+ * "Verify Later", may enter the app in public-only mode (marketplace
+ * browsing). By default such an account is still routed to the
+ * verification screen so it isn't silently skipped;
+ * `verificationSkipped` is the one escape hatch, set only by the user's
+ * own explicit choice.
  */
 export function resolveRootRoute({
   status,

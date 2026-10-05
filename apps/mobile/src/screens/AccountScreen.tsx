@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, useNavigation, type NavigationProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,8 +8,15 @@ import { useAuth } from '../auth/AuthContext';
 import { getWorkspaceDetail, requestPasswordReset, updateWorkspaceContact } from '../api/auth';
 import { ApiError } from '../api/client';
 import type { WorkspaceSummary } from '../api/types';
-import { VerificationForm } from './auth/VerificationScreen';
-import { Avatar, Button, Card, SectionHeader, TextField, confirmDestructive } from '../components/ui';
+import type { AppStackParamList } from '../navigation/AppStack';
+import {
+  Avatar,
+  Button,
+  Card,
+  SectionHeader,
+  TextField,
+  confirmDestructive,
+} from '../components/ui';
 import { colors, radii, spacing, typography } from '../theme';
 
 /**
@@ -24,14 +31,14 @@ import { colors, radii, spacing, typography } from '../theme';
  * existed before this pass — only the presentation changed.
  */
 export function AccountScreen(): React.JSX.Element {
-  const { user, workspaces, currentWorkspace, permissions, selectWorkspace, logout, refreshSession } =
+  const { user, isVerified, workspaces, currentWorkspace, permissions, selectWorkspace, logout } =
     useAuth();
+  const navigation = useNavigation<NavigationProp<AppStackParamList>>();
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
   const isProfessional = user?.accountType !== 'CLIENT';
   const canEditContact = permissions.has('workspace.update');
-  const [showVerification, setShowVerification] = useState(false);
-  const needsVerification = Boolean(user) && (!user?.emailVerifiedAt || !user?.phoneVerifiedAt);
+  const needsVerification = Boolean(user) && !isVerified;
 
   const [contactPhone, setContactPhone] = useState('');
   const [contactEmail, setContactEmail] = useState('');
@@ -104,29 +111,10 @@ export function AccountScreen(): React.JSX.Element {
     }
   };
 
-  const onLogout = () => confirmDestructive('Sign out?', undefined, 'Sign Out', () => void logout());
+  const onLogout = () =>
+    confirmDestructive('Sign out?', undefined, 'Sign Out', () => void logout());
 
   const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ');
-
-  if (showVerification && user) {
-    return (
-      <View style={styles.container}>
-        {isFocused ? <StatusBar style="light" /> : null}
-        <VerificationForm
-          email={user.email}
-          phone={user.phone}
-          initialEmailVerified={Boolean(user.emailVerifiedAt)}
-          initialPhoneVerified={Boolean(user.phoneVerifiedAt)}
-          onVerified={async () => {
-            await refreshSession();
-            setShowVerification(false);
-          }}
-          onSkip={async () => setShowVerification(false)}
-          onBack={() => setShowVerification(false)}
-        />
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
@@ -146,13 +134,16 @@ export function AccountScreen(): React.JSX.Element {
               <Card style={styles.verificationCard}>
                 <Text style={typography.body}>
                   Your email{!user?.emailVerifiedAt ? ' (not verified)' : ''} and phone
-                  {!user?.phoneVerifiedAt ? ' (not verified)' : ''} help protect your account and are
-                  required before publishing a property to the public marketplace.
+                  {!user?.phoneVerifiedAt ? ' (not verified)' : ''} must be verified before you can
+                  {isProfessional
+                    ? ' add properties or access your workspace.'
+                    : ' access verified-only features.'}{' '}
+                  Until then you can browse public listings.
                 </Text>
                 <Button
                   label="Complete Verification"
                   size="sm"
-                  onPress={() => setShowVerification(true)}
+                  onPress={() => navigation.navigate('VerifyAccount')}
                   style={styles.verificationButton}
                 />
               </Card>
@@ -185,7 +176,9 @@ export function AccountScreen(): React.JSX.Element {
                         {workspace.type === 'COMPANY' ? 'Company workspace' : 'Personal workspace'}
                       </Text>
                     </View>
-                    {active ? <Ionicons name="checkmark-circle" size={20} color={colors.brand.gold} /> : null}
+                    {active ? (
+                      <Ionicons name="checkmark-circle" size={20} color={colors.brand.gold} />
+                    ) : null}
                   </TouchableOpacity>
                 );
               })}
@@ -196,16 +189,38 @@ export function AccountScreen(): React.JSX.Element {
             <View style={styles.section}>
               <SectionHeader title="Public Contact Info" />
               <Text style={[typography.bodySmall, styles.hintSpacing]}>
-                Shown to clients on this workspace&apos;s published listings. Leave a field blank to hide it.
+                Shown to clients on this workspace&apos;s published listings. Leave a field blank to
+                hide it.
               </Text>
               {!loadingContact && (
                 <Card>
-                  <TextField label="Phone" value={contactPhone} onChangeText={setContactPhone} keyboardType="phone-pad" />
-                  <TextField label="WhatsApp" value={contactWhatsapp} onChangeText={setContactWhatsapp} keyboardType="phone-pad" />
-                  <TextField label="Email" value={contactEmail} onChangeText={setContactEmail} keyboardType="email-address" autoCapitalize="none" />
+                  <TextField
+                    label="Phone"
+                    value={contactPhone}
+                    onChangeText={setContactPhone}
+                    keyboardType="phone-pad"
+                  />
+                  <TextField
+                    label="WhatsApp"
+                    value={contactWhatsapp}
+                    onChangeText={setContactWhatsapp}
+                    keyboardType="phone-pad"
+                  />
+                  <TextField
+                    label="Email"
+                    value={contactEmail}
+                    onChangeText={setContactEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
                   {contactError ? <Text style={styles.error}>{contactError}</Text> : null}
                   {contactSaved ? <Text style={styles.success}>Saved.</Text> : null}
-                  <Button label="Save" size="sm" onPress={() => void onSaveContact()} loading={savingContact} />
+                  <Button
+                    label="Save"
+                    size="sm"
+                    onPress={() => void onSaveContact()}
+                    loading={savingContact}
+                  />
                 </Card>
               )}
             </View>
@@ -213,7 +228,11 @@ export function AccountScreen(): React.JSX.Element {
 
           <View style={styles.section}>
             <SectionHeader title="Security" />
-            <TouchableOpacity style={styles.menuRow} onPress={() => void onRequestPasswordReset()} disabled={resettingPassword}>
+            <TouchableOpacity
+              style={styles.menuRow}
+              onPress={() => void onRequestPasswordReset()}
+              disabled={resettingPassword}
+            >
               <View style={styles.menuIcon}>
                 <Ionicons name="lock-closed-outline" size={18} color={colors.brand.primaryNavy} />
               </View>
@@ -222,7 +241,12 @@ export function AccountScreen(): React.JSX.Element {
             </TouchableOpacity>
           </View>
 
-          <Button label="Sign Out" variant="destructive" onPress={onLogout} style={styles.logoutButton} />
+          <Button
+            label="Sign Out"
+            variant="destructive"
+            onPress={onLogout}
+            style={styles.logoutButton}
+          />
         </View>
       </ScrollView>
     </View>

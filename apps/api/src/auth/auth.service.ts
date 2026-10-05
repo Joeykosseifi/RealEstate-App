@@ -20,7 +20,10 @@ import {
 } from '../sessions/sessions.service';
 import { EmailVerificationService } from '../verification/email-verification.service';
 import { PhoneVerificationService } from '../verification/phone-verification.service';
-import { WorkspacesService, type PendingCompanyProfile } from '../workspaces/workspaces.service';
+import {
+  WorkspacesService,
+  type PendingCompanyProfile,
+} from '../workspaces/workspaces.service';
 import type { AuthTokens, AuthUser } from '@real-estate/types';
 import type { RegisterClientDto } from './dto/register-client.dto';
 import type { RegisterAgentDto } from './dto/register-agent.dto';
@@ -91,11 +94,10 @@ export class AuthService {
   /**
    * A workspace/company is created immediately at registration — in the
    * same transaction as the User row — rather than waiting for email +
-   * phone verification. Verification gates specific features (see
-   * PublicationsService.submit for the one that matters: publishing a
-   * listing to the public marketplace), never the account's ability to
-   * sign in and use the app at all — see JwtStrategy and
-   * resolveInitialRoute.ts for the same principle applied elsewhere.
+   * phone verification. The workspace exists but is unreachable until
+   * the account is verified: VerifiedAccountGuard rejects every
+   * workspace route for an unverified account, which can only sign in
+   * and browse the public marketplace.
    * AccountActivationService.activateIfVerified now only flips
    * accountStatus to ACTIVE once both checks pass; it no longer creates
    * anything, since it already exists by then.

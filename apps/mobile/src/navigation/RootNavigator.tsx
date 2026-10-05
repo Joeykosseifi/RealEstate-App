@@ -6,7 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthContext';
 import { AuthStack } from './AuthStack';
-import { MainTabs } from './MainTabs';
+import { AppStack } from './AppStack';
 import { VerificationForm } from '../screens/auth/VerificationScreen';
 import { resolveRootRoute } from './resolveInitialRoute';
 import { colors, spacing } from '../theme';
@@ -55,12 +55,16 @@ function IndeterminateLoadingBar(): React.JSX.Element {
  * between four states: restoring the session, the unauthenticated
  * `AuthStack` (Welcome → Sign In / Create Account), a still-
  * `PENDING_VERIFICATION` account that logged back in before finishing
- * verification, or the real role-aware app (`MainTabs`, unchanged from
- * Milestone 6).
+ * verification, or the signed-in app (`AppStack`: the role-aware
+ * `MainTabs` plus the shared verification screen).
  */
 export function RootNavigator(): React.JSX.Element {
   const { status, user, refreshSession, logout, verificationSkipped, skipVerification } = useAuth();
-  const route = resolveRootRoute({ status, accountStatus: user?.accountStatus, verificationSkipped });
+  const route = resolveRootRoute({
+    status,
+    accountStatus: user?.accountStatus,
+    verificationSkipped,
+  });
   const insets = useSafeAreaInsets();
 
   if (route === 'loading') {
@@ -96,7 +100,7 @@ export function RootNavigator(): React.JSX.Element {
           onSignOut={() => void logout()}
         />
       ) : (
-        <MainTabs />
+        <AppStack />
       )}
     </NavigationContainer>
   );

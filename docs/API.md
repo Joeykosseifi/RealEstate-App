@@ -100,22 +100,26 @@ triggers activation (`AccountActivationService.activateIfVerified`),
 which is now a pure status flip to `ACTIVE` (no side effects — the
 workspace already exists).
 
-`PENDING_VERIFICATION` accounts can already log in and use the app —
-verification gates specific product features, not authentication or
-browsing itself; only `SUSPENDED`/`DEACTIVATED` block login. The one
-feature that does require full verification today is submitting a
-property to the public marketplace (`PublicationsService.submit`
-rejects with 403 unless the actor's `emailVerifiedAt` and
-`phoneVerifiedAt` are both set) — an unverified identity must not put a
-listing, and the contact info attached to it, in front of the public.
+`PENDING_VERIFICATION` accounts can log in (only `SUSPENDED`/
+`DEACTIVATED` block authentication), but until **both** `emailVerifiedAt`
+and `phoneVerifiedAt` are set they have **public-only** access: the
+marketplace and favorites work; every workspace route (including `GET
+/workspaces`, property creation of any kind, and invitation acceptance)
+returns `403` with `error: "AccountVerificationRequiredException"`. The
+check runs on every request against the live user row, so verifying
+unlocks the workspace on the existing access token. See
+`docs/PERMISSIONS.md` "Verified-account requirement".
 
 On mobile, a user can explicitly choose "Verify Later" on the
 verification screen rather than finish then and there; this is a
 client-side-only navigation preference (`AuthContext.skipVerification`,
 `apps/mobile/src/auth/verificationSkip.ts`) — it never touches the
 backend and never fakes `emailVerifiedAt`/`phoneVerifiedAt`/
-`accountStatus`. The user can return to `AccountScreen` at any time to
-finish verification.
+`accountStatus`. An unverified AGENT/COMPANY gets `PublicOnlyTabs`
+(marketplace Home/Search/Favorites/More); its "+" button shows a
+"Verification required" prompt whose "Verify Account" opens the shared
+`VerifyAccount` screen (also reachable from Account → Complete
+Verification).
 
 ### Mobile registration & onboarding (Milestone 6.1)
 

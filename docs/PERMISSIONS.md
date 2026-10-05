@@ -300,12 +300,32 @@ private professional data.
 Authorization is resolved server-side, in this order, for every
 professional-data request:
 
-authenticated user → current workspace → active membership → role →
-required permission → entity ownership → collaboration grant (if the
-entity belongs to a different workspace).
+authenticated user → **verified account** → current workspace → active
+membership → role → required permission → entity ownership →
+collaboration grant (if the entity belongs to a different workspace).
 
 Default deny at every step. The frontend-provided workspace, role, or
 permission is never trusted.
+
+### Verified-account requirement
+
+"Verified" means `emailVerifiedAt` **and** `phoneVerifiedAt` are both
+set (`isAccountVerified`, `apps/api/src/auth/account-verification.ts`).
+`accountStatus` is deliberately not the check — an admin restore sets
+`ACTIVE` without regard to verification. `VerifiedAccountGuard` enforces
+it as part of `@RequireWorkspacePermission` (so every workspace-scoped
+route: properties, media, publications, dashboard, clients,
+requirements, matching, shortlists, presentations, members, roles,
+workspace detail), and via `@RequireVerifiedAccount` on `GET
+/workspaces` and invitation acceptance. It runs before workspace
+resolution, so an unverified caller gets the same
+`403 AccountVerificationRequiredException` for every workspace id and
+can't probe what exists.
+
+Unverified accounts are **public-only**: they can sign in, use the
+marketplace (`/marketplace/properties`, list/search/detail) and
+favorites, and complete verification. Verification is an *additional*
+requirement — it never grants a permission a member's role lacks.
 
 ## Workspace scope vs. platform scope (Milestone 2)
 

@@ -5,9 +5,8 @@ import { AuditService } from '../audit/audit.service';
 /**
  * Runs once both email and phone are verified. A workspace/company (for
  * AGENT/COMPANY accounts) is created immediately at registration — see
- * AuthService.register — not here, since verification gates specific
- * features (see PublicationsService.submit), never the account's
- * ability to sign in and use the app at all. So this is now a pure
+ * AuthService.register — not here; it just isn't reachable until the
+ * account is verified (see VerifiedAccountGuard). So this is a pure
  * status transition: PENDING_VERIFICATION -> ACTIVE.
  *
  * Exactly-once semantics under concurrency (two verification calls
